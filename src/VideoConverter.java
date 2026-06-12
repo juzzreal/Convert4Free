@@ -7,17 +7,22 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class VideoConverter {
     public void convertMkvToMp4(Path inputFile, Path outputFile, boolean overwrite) {
-        checkFfmpegInstalled();
+        convertMkvToMp4(inputFile, outputFile, overwrite, System.out::println);
+    }
 
-        System.out.println("Convert4Free");
-        System.out.println("Preparing MKV to MP4 conversion...");
-        System.out.println("Input:  " + inputFile);
-        System.out.println("Output: " + outputFile);
-        System.out.println("Mode:   stream copy/remux when possible");
-        System.out.println();
+    public void convertMkvToMp4(Path inputFile, Path outputFile, boolean overwrite, Consumer<String> logger) {
+        checkFfmpegInstalled(logger);
+
+        log(logger, "Convert4Free");
+        log(logger, "Preparing MKV to MP4 conversion...");
+        log(logger, "Input:  " + inputFile);
+        log(logger, "Output: " + outputFile);
+        log(logger, "Mode:   stream copy/remux when possible");
+        log(logger, "");
 
         List<String> command = new ArrayList<>();
         command.add("ffmpeg");
@@ -28,18 +33,18 @@ public class VideoConverter {
         command.add("copy");
         command.add(outputFile.toString());
 
-        System.out.println("Starting FFmpeg...");
-        System.out.println("This keeps CPU, power, and RAM usage low by copying compatible streams.");
-        System.out.println();
+        log(logger, "Starting FFmpeg...");
+        log(logger, "This keeps CPU, power, and RAM usage low by copying compatible streams.");
+        log(logger, "");
 
         // FFmpeg reads and writes the video files directly. Java only starts the
         // process and prints status text, so the video is never loaded into RAM.
-        ProcessResult result = runCommand(command, true);
+        ProcessResult result = runCommand(command, logger);
 
         if (result.exitCode() == 0) {
-            System.out.println();
-            System.out.println("Conversion completed successfully.");
-            System.out.println("Original audio/video quality was preserved by stream copying.");
+            log(logger, "");
+            log(logger, "Conversion completed successfully.");
+            log(logger, "Original audio/video quality was preserved by stream copying.");
             return;
         }
 
@@ -52,9 +57,9 @@ public class VideoConverter {
                         + result.lastOutputLines());
     }
 
-    private void checkFfmpegInstalled() {
-        System.out.println("Checking FFmpeg installation...");
-        ProcessResult result = runCommand(List.of("ffmpeg", "-version"), false);
+    private void checkFfmpegInstalled(Consumer<String> logger) {
+        log(logger, "Checking FFmpeg installation...");
+        ProcessResult result = runCommand(List.of("ffmpeg", "-version"), null);
 
         if (result.exitCode() != 0) {
             throw new ConversionException(
@@ -62,18 +67,18 @@ public class VideoConverter {
                             + "Please install FFmpeg and make sure the 'ffmpeg' command is available in your PATH.");
         }
 
-        System.out.println("FFmpeg is available.");
+        log(logger, "FFmpeg is available.");
     }
 
-    private ProcessResult runCommand(List<String> command, boolean showOutput) {
+    private ProcessResult runCommand(List<String> command, Consumer<String> logger) {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
 
         try {
             Process process = processBuilder.start();
             // FFmpeg writes most status information to stderr, so both streams
             // are read to prevent the process from getting stuck.
-            OutputCollector stdout = new OutputCollector(process.getInputStream(), showOutput);
-            OutputCollector stderr = new OutputCollector(process.getErrorStream(), showOutput);
+            OutputCollector stdout = new OutputCollector(process.getInputStream(), logger);
+            OutputCollector stderr = new OutputCollector(process.getErrorStream(), logger);
 
             Thread stdoutThread = new Thread(stdout);
             Thread stderrThread = new Thread(stderr);
@@ -97,16 +102,22 @@ public class VideoConverter {
         }
     }
 
+    private void log(Consumer<String> logger, String message) {
+        if (logger != null) {
+            logger.accept(message);
+        }
+    }
+
     private static class OutputCollector implements Runnable {
         private static final int MAX_STORED_LINES = 40;
 
         private final InputStream inputStream;
-        private final boolean showOutput;
+        private final Consumer<String> logger;
         private final List<String> lines = Collections.synchronizedList(new ArrayList<>());
 
-        OutputCollector(InputStream inputStream, boolean showOutput) {
+        OutputCollector(InputStream inputStream, Consumer<String> logger) {
             this.inputStream = inputStream;
-            this.showOutput = showOutput;
+            this.logger = logger;
         }
 
         @Override
@@ -116,8 +127,8 @@ public class VideoConverter {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     remember(line);
-                    if (showOutput) {
-                        System.out.println(line);
+                    if (logger != null) {
+                        logger.accept(line);
                     }
                 }
             } catch (IOException exception) {

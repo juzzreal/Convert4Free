@@ -26,6 +26,20 @@ javac -d out src\*.java
 
 ## Usage
 
+Start the desktop UI:
+
+```powershell
+java -cp out Convert4Free
+```
+
+or:
+
+```powershell
+java -cp out Convert4Free --ui
+```
+
+Use the command line directly:
+
 ```powershell
 java -cp out Convert4Free input.mkv output.mp4
 java -cp out Convert4Free input.mkv output.mp4 --overwrite
@@ -39,6 +53,7 @@ java -cp out Convert4Free --help
 ```text
 src/
   Convert4Free.java      Main entry point
+  Convert4FreeWindow.java Desktop user interface
   VideoConverter.java    Runs FFmpeg through ProcessBuilder
   FileValidator.java     Checks input and output file paths
   CreditsScreen.java     Prints creator credits

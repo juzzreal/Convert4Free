@@ -3,6 +3,8 @@ public class HelpScreen {
         System.out.println("Convert4Free Help");
         System.out.println();
         System.out.println("Usage:");
+        System.out.println("  java Convert4Free");
+        System.out.println("  java Convert4Free --ui");
         System.out.println("  java Convert4Free input.mkv output.mp4");
         System.out.println("  java Convert4Free input.mkv output.mp4 --overwrite");
         System.out.println("  java Convert4Free --credits");

@@ -4,7 +4,12 @@ public class Convert4Free {
     private static final String VERSION = "0.1.0";
 
     public static void main(String[] args) {
-        if (args.length == 0 || hasFlag(args, "--help")) {
+        if (args.length == 0 || (args.length == 1 && "--ui".equalsIgnoreCase(args[0]))) {
+            Convert4FreeWindow.open();
+            return;
+        }
+
+        if (hasFlag(args, "--help")) {
             HelpScreen.print();
             return;
         }
