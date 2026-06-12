@@ -2,6 +2,11 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.4.0");
+        System.out.println("- Fully rebuilt the desktop UI");
+        System.out.println("- Added native Windows file picker dialogs");
+        System.out.println("- Improved the conversion workflow and status area");
+        System.out.println();
         System.out.println("Version 0.3.0");
         System.out.println("- Improved MKV to MP4 for After Effects");
         System.out.println("- Converts MKV audio to AAC stereo");

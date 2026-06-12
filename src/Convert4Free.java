@@ -1,7 +1,7 @@
 import java.nio.file.Path;
 
 public class Convert4Free {
-    private static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.4.0";
 
     public static void main(String[] args) {
         if (args.length == 0 || (args.length == 1 && "--ui".equalsIgnoreCase(args[0]))) {
