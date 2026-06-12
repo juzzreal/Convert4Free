@@ -2,6 +2,13 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.4.1");
+        System.out.println("- File-first desktop workflow");
+        System.out.println("- The app now detects the selected input format");
+        System.out.println("- Only possible output formats are shown after choosing a file");
+        System.out.println("- Added an embedded HTML/CSS update log page");
+        System.out.println("- Reworked the status area with friendlier progress text");
+        System.out.println();
         System.out.println("Version 0.4.0");
         System.out.println("- Fully rebuilt the desktop UI");
         System.out.println("- Added native Windows file picker dialogs");

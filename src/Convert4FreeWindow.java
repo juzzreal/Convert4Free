@@ -20,6 +20,7 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JEditorPane;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -51,6 +52,8 @@ public class Convert4FreeWindow extends JFrame {
     private final JTextArea logArea = new JTextArea();
     private final JCheckBox overwriteBox = new JCheckBox("Replace output file if it already exists");
     private final JLabel statusLabel = new JLabel("Ready");
+    private final JLabel statusTitleLabel = new JLabel("Choose a file to begin");
+    private final JLabel statusDetailLabel = new JLabel("Convert4Free will detect the format and show what you can convert it into.");
     private final JLabel modeDescriptionLabel = new JLabel();
     private final JButton inputButton = new JButton("Choose");
     private final JButton outputButton = new JButton("Choose");
@@ -58,6 +61,7 @@ public class Convert4FreeWindow extends JFrame {
     private final JButton updateButton = new JButton("Update");
 
     private ConversionType selectedConversionType = ConversionType.MKV_TO_MP4;
+    private File selectedInputFile;
 
     public static void open() {
         SwingUtilities.invokeLater(() -> {
@@ -84,7 +88,7 @@ public class Convert4FreeWindow extends JFrame {
         root.add(createContent(), BorderLayout.CENTER);
         setContentPane(root);
 
-        selectMode(ConversionType.MKV_TO_MP4);
+        setAvailableModes(new ConversionType[0]);
         pack();
     }
 
@@ -115,12 +119,12 @@ public class Convert4FreeWindow extends JFrame {
         actions.setOpaque(false);
 
         JButton helpButton = secondaryButton("Help");
-        JButton changelogButton = secondaryButton("Changelog");
+        JButton changelogButton = secondaryButton("Updates");
         JButton creditsButton = secondaryButton("Credits");
         styleSecondaryButton(updateButton);
 
         helpButton.addActionListener(event -> showMessage("Help", helpText()));
-        changelogButton.addActionListener(event -> showMessage("Changelog", changelogText()));
+        changelogButton.addActionListener(event -> showUpdateLogPage());
         creditsButton.addActionListener(event -> showMessage("Credits", creditsText()));
         updateButton.addActionListener(event -> startUpdate());
 
@@ -154,14 +158,14 @@ public class Convert4FreeWindow extends JFrame {
         body.setOpaque(false);
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        body.add(sectionTitle("1. Choose format"));
-        body.add(Box.createVerticalStrut(10));
-        body.add(createModePanel());
-        body.add(Box.createVerticalStrut(18));
-        body.add(sectionTitle("2. Pick files"));
+        body.add(sectionTitle("1. Choose input file"));
         body.add(Box.createVerticalStrut(10));
         body.add(createFilePanel());
-        body.add(Box.createVerticalStrut(12));
+        body.add(Box.createVerticalStrut(18));
+        body.add(sectionTitle("2. Choose output format"));
+        body.add(Box.createVerticalStrut(10));
+        body.add(createModePanel());
+        body.add(Box.createVerticalStrut(14));
         body.add(overwriteBox);
         body.add(Box.createVerticalStrut(14));
 
@@ -232,6 +236,7 @@ public class Convert4FreeWindow extends JFrame {
 
         addFileRow(panel, constraints, 0, "Input", inputField, inputButton);
         addFileRow(panel, constraints, 1, "Output", outputField, outputButton);
+        outputButton.setEnabled(false);
         return panel;
     }
 
@@ -267,7 +272,7 @@ public class Convert4FreeWindow extends JFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
 
-        JLabel title = new JLabel("Activity");
+        JLabel title = new JLabel("Status");
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
 
@@ -286,12 +291,28 @@ public class Convert4FreeWindow extends JFrame {
         logArea.setForeground(new Color(39, 44, 50));
         logArea.setBackground(new Color(250, 251, 252));
         logArea.setBorder(new EmptyBorder(12, 12, 12, 12));
-        logArea.setText("Ready.\nPick a format, choose your files, then convert.\n");
+        JPanel friendlyStatus = new JPanel();
+        friendlyStatus.setOpaque(false);
+        friendlyStatus.setLayout(new BoxLayout(friendlyStatus, BoxLayout.Y_AXIS));
+        statusTitleLabel.setForeground(TEXT);
+        statusTitleLabel.setFont(statusTitleLabel.getFont().deriveFont(Font.BOLD, 20f));
+        statusDetailLabel.setForeground(MUTED);
+        statusDetailLabel.setFont(statusDetailLabel.getFont().deriveFont(13f));
+        friendlyStatus.add(statusTitleLabel);
+        friendlyStatus.add(Box.createVerticalStrut(4));
+        friendlyStatus.add(statusDetailLabel);
+
+        logArea.setText("Waiting for a file.\n");
 
         JScrollPane scrollPane = new JScrollPane(logArea);
         scrollPane.setBorder(new LineBorder(BORDER, 1, true));
 
-        panel.add(header, BorderLayout.NORTH);
+        JPanel top = new JPanel(new BorderLayout(0, 12));
+        top.setOpaque(false);
+        top.add(header, BorderLayout.NORTH);
+        top.add(friendlyStatus, BorderLayout.CENTER);
+
+        panel.add(top, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
     }
@@ -311,20 +332,57 @@ public class Convert4FreeWindow extends JFrame {
 
         modeDescriptionLabel.setText(type.description());
         updateOutputSuggestion();
-        setStatus("Ready");
+        outputButton.setEnabled(selectedInputFile != null);
+        setFriendlyStatus("Ready to convert", "Output will be created as " + type.targetLabel() + ".");
+        setStatus(type.targetLabel());
+    }
+
+    private void setAvailableModes(ConversionType[] types) {
+        boolean hasModes = types.length > 0;
+        selectedConversionType = hasModes ? types[0] : ConversionType.MKV_TO_MP4;
+
+        for (Map.Entry<ConversionType, JToggleButton> entry : modeButtons.entrySet()) {
+            boolean available = false;
+            for (ConversionType type : types) {
+                if (entry.getKey() == type) {
+                    available = true;
+                    break;
+                }
+            }
+            entry.getValue().setVisible(available);
+            entry.getValue().setEnabled(available);
+        }
+
+        if (hasModes) {
+            selectMode(types[0]);
+        } else {
+            modeDescriptionLabel.setText("Choose a supported input file first.");
+            outputButton.setEnabled(false);
+            convertButton.setEnabled(false);
+            setFriendlyStatus("Choose a file to begin", "Supported inputs: MKV and MP4.");
+            setStatus("Waiting");
+        }
     }
 
     private void chooseInputFile() {
-        ConversionType conversionType = selectedConversionType;
-        FileDialog dialog = new FileDialog((Frame) this, "Choose " + conversionType.inputExtension() + " file", FileDialog.LOAD);
-        dialog.setFilenameFilter((directory, name) -> name.toLowerCase().endsWith(conversionType.inputExtension()));
+        FileDialog dialog = new FileDialog((Frame) this, "Choose a video file", FileDialog.LOAD);
+        dialog.setFilenameFilter((directory, name) -> ConversionType.isSupportedInput(name));
         openNearCurrentPath(dialog, inputField.getText());
         dialog.setVisible(true);
 
         if (dialog.getFile() != null) {
             File inputFile = new File(dialog.getDirectory(), dialog.getFile());
+            if (!ConversionType.isSupportedInput(inputFile.getName())) {
+                showMessage("Unsupported file", "Choose an MKV or MP4 file.");
+                return;
+            }
+
+            selectedInputFile = inputFile;
             inputField.setText(inputFile.getAbsolutePath());
-            outputField.setText(suggestOutputPath(inputFile, conversionType));
+            setAvailableModes(ConversionType.forInputPath(inputFile.getName()));
+            outputField.setText(suggestOutputPath(inputFile, selectedConversionType));
+            convertButton.setEnabled(true);
+            setFriendlyStatus("File detected", inputFile.getName() + " can be converted to " + availableTargetsText() + ".");
             appendLog("Selected input: " + inputFile.getAbsolutePath());
         }
     }
@@ -382,6 +440,18 @@ public class Convert4FreeWindow extends JFrame {
         }
     }
 
+    private String availableTargetsText() {
+        ConversionType[] types = ConversionType.forInputPath(selectedInputFile.getName());
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < types.length; index++) {
+            if (index > 0) {
+                builder.append(index == types.length - 1 ? " or " : ", ");
+            }
+            builder.append(types[index].targetLabel());
+        }
+        return builder.toString();
+    }
+
     private void startConversion() {
         ConversionType conversionType = selectedConversionType;
         String inputPath = inputField.getText().trim();
@@ -398,6 +468,7 @@ public class Convert4FreeWindow extends JFrame {
 
         setBusy(true, "Converting");
         logArea.setText("");
+        setFriendlyStatus("Conversion running", "FFmpeg is processing your file. You can follow details below.");
         appendLog("Starting " + conversionType + "...");
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -421,10 +492,12 @@ public class Convert4FreeWindow extends JFrame {
                 try {
                     get();
                     setStatus("Complete");
+                    setFriendlyStatus("Conversion complete", "Your new file is ready.");
                     showMessage("Done", "Conversion completed successfully.");
                 } catch (Exception exception) {
                     Throwable cause = exception.getCause() == null ? exception : exception.getCause();
                     setStatus("Failed");
+                    setFriendlyStatus("Conversion failed", "Check the details below for the FFmpeg message.");
                     appendLog("Conversion failed.");
                     appendLog(cause.getMessage());
                     showMessage("Conversion failed", cause.getMessage());
@@ -438,6 +511,7 @@ public class Convert4FreeWindow extends JFrame {
     private void startUpdate() {
         setBusy(true, "Updating");
         logArea.setText("");
+        setFriendlyStatus("Updating Convert4Free", "Downloading the newest GitHub version and preparing the app jar.");
         appendLog("Starting update...");
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -461,10 +535,12 @@ public class Convert4FreeWindow extends JFrame {
                 try {
                     get();
                     setStatus("Update ready");
+                    setFriendlyStatus("Update prepared", "Close Convert4Free so the replacement can finish.");
                     showMessage("Update prepared", "Close Convert4Free. The updater will finish replacing the app jar after exit.");
                 } catch (Exception exception) {
                     Throwable cause = exception.getCause() == null ? exception : exception.getCause();
                     setStatus("Update failed");
+                    setFriendlyStatus("Update failed", "The app could not finish the update. Details are below.");
                     appendLog("Update failed.");
                     appendLog(cause.getMessage());
                     showMessage("Update failed", cause.getMessage());
@@ -476,18 +552,24 @@ public class Convert4FreeWindow extends JFrame {
     }
 
     private void setBusy(boolean busy, String status) {
-        convertButton.setEnabled(!busy);
+        boolean hasInput = selectedInputFile != null;
+        convertButton.setEnabled(!busy && hasInput && !outputField.getText().trim().isBlank());
         updateButton.setEnabled(!busy);
         inputButton.setEnabled(!busy);
-        outputButton.setEnabled(!busy);
+        outputButton.setEnabled(!busy && hasInput);
         for (JToggleButton button : modeButtons.values()) {
-            button.setEnabled(!busy);
+            button.setEnabled(!busy && hasInput && button.isVisible());
         }
         setStatus(status);
     }
 
     private void setStatus(String status) {
         statusLabel.setText(status);
+    }
+
+    private void setFriendlyStatus(String title, String detail) {
+        statusTitleLabel.setText(title);
+        statusDetailLabel.setText(detail);
     }
 
     private void appendLog(String message) {
@@ -497,6 +579,16 @@ public class Convert4FreeWindow extends JFrame {
 
     private void showMessage(String title, String message) {
         JOptionPane.showMessageDialog(this, message, title, JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showUpdateLogPage() {
+        JEditorPane page = new JEditorPane("text/html", updateLogHtml());
+        page.setEditable(false);
+        page.setOpaque(false);
+        JScrollPane scrollPane = new JScrollPane(page);
+        scrollPane.setPreferredSize(new Dimension(560, 430));
+        scrollPane.setBorder(new LineBorder(BORDER, 1, true));
+        JOptionPane.showMessageDialog(this, scrollPane, "Convert4Free Updates", JOptionPane.PLAIN_MESSAGE);
     }
 
     private JPanel cardPanel() {
@@ -606,5 +698,52 @@ public class Convert4FreeWindow extends JFrame {
                 - Redesigned the desktop UI for multiple conversion modes
                 - Added automatic output extension suggestions
                 """;
+    }
+
+    private String updateLogHtml() {
+        return """
+                <html>
+                <head>
+                  <style>
+                    body { font-family: Segoe UI, Arial, sans-serif; color: #212529; background: #ffffff; margin: 18px; }
+                    h1 { font-size: 24px; margin: 0 0 4px 0; }
+                    .sub { color: #68717a; margin-bottom: 18px; }
+                    .version { border: 1px solid #dde2e8; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+                    h2 { font-size: 16px; margin: 0 0 8px 0; color: #145b4b; }
+                    ul { margin: 0; padding-left: 18px; }
+                    li { margin-bottom: 5px; }
+                    .badge { color: #145b4b; background: #e2f5f0; padding: 4px 8px; border-radius: 999px; }
+                  </style>
+                </head>
+                <body>
+                  <h1>Update Log</h1>
+                  <div class="sub">Convert4Free <span class="badge">v%s</span></div>
+                  <div class="version">
+                    <h2>0.4.1</h2>
+                    <ul>
+                      <li>File-first workflow: choose input first, then pick a possible output.</li>
+                      <li>Automatic input detection for MKV and MP4 files.</li>
+                      <li>Friendlier status area with clear next steps.</li>
+                      <li>This update page is built into the app with simple HTML and CSS.</li>
+                    </ul>
+                  </div>
+                  <div class="version">
+                    <h2>0.4.0</h2>
+                    <ul>
+                      <li>Full desktop UI rebuild.</li>
+                      <li>Native Windows file picker dialogs.</li>
+                      <li>Cleaner workflow and activity area.</li>
+                    </ul>
+                  </div>
+                  <div class="version">
+                    <h2>0.3.0</h2>
+                    <ul>
+                      <li>After Effects friendly MKV to MP4 mode.</li>
+                      <li>Creates one AAC stereo audio track from MKV sources.</li>
+                    </ul>
+                  </div>
+                </body>
+                </html>
+                """.formatted(Convert4Free.VERSION);
     }
 }

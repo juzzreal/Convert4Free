@@ -11,8 +11,8 @@ Convert4Free uses FFmpeg and supports:
 MKV to MP4 keeps the video stream when possible and creates one AAC stereo audio
 track, so clips import more reliably into editing software.
 
-Version 0.4.0 includes a rebuilt desktop UI and native Windows file picker
-dialogs.
+Version 0.4.1 uses a file-first UI: choose a file, then Convert4Free shows the
+formats that file can be converted to.
 
 ## Note
 

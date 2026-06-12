@@ -32,6 +32,10 @@ public enum ConversionType {
         return outputExtension;
     }
 
+    public String targetLabel() {
+        return outputExtension.toUpperCase(Locale.ROOT).substring(1);
+    }
+
     public String mode() {
         return mode;
     }
@@ -63,6 +67,17 @@ public enum ConversionType {
 
         throw new IllegalArgumentException(
                 "Unsupported conversion. Supported modes: MKV to MP4, MP4 to MOV, MP4 to MP3.");
+    }
+
+    public static ConversionType[] forInputPath(String inputPath) {
+        String input = inputPath.toLowerCase(Locale.ROOT);
+        return java.util.Arrays.stream(values())
+                .filter(type -> input.endsWith(type.inputExtension))
+                .toArray(ConversionType[]::new);
+    }
+
+    public static boolean isSupportedInput(String inputPath) {
+        return forInputPath(inputPath).length > 0;
     }
 
     @Override
