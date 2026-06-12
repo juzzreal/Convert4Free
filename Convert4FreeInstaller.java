@@ -29,12 +29,14 @@ public class Convert4FreeInstaller {
             Path zipFile = downloadRepository();
             replaceInstallFolder(zipFile);
             compileProject();
+            buildProgramJar();
             createDesktopLauncher();
 
             Files.deleteIfExists(zipFile);
 
             System.out.println();
             System.out.println("Installation complete.");
+            System.out.println("Program jar: " + INSTALL_FOLDER.resolve("Convert4Free.jar"));
             System.out.println("Use the desktop launcher: Convert4Free starten.bat");
         } catch (Exception exception) {
             System.out.println();
@@ -48,7 +50,9 @@ public class Convert4FreeInstaller {
         System.out.println("Downloading Convert4Free from GitHub...");
         Path zipFile = Files.createTempFile("convert4free-main", ".zip");
 
-        HttpClient client = HttpClient.newHttpClient();
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
         HttpRequest request = HttpRequest.newBuilder(URI.create(REPOSITORY_ZIP_URL)).GET().build();
         HttpResponse<Path> response = client.send(request, HttpResponse.BodyHandlers.ofFile(zipFile));
 
@@ -139,10 +143,33 @@ public class Convert4FreeInstaller {
             writer.newLine();
             writer.write("cd /d \"" + INSTALL_FOLDER + "\"");
             writer.newLine();
-            writer.write("java -cp out Convert4Free");
+            writer.write("java -jar Convert4Free.jar");
             writer.newLine();
             writer.write("pause");
             writer.newLine();
+        }
+    }
+
+    private static void buildProgramJar() throws IOException, InterruptedException {
+        System.out.println("Building Convert4Free.jar...");
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "jar",
+                "--create",
+                "--file",
+                "Convert4Free.jar",
+                "--main-class",
+                "Convert4Free",
+                "-C",
+                "out",
+                ".");
+        processBuilder.directory(INSTALL_FOLDER.toFile());
+        processBuilder.inheritIO();
+
+        Process process = processBuilder.start();
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("Could not build Convert4Free.jar. Make sure the JDK 'jar' tool is installed.");
         }
     }
 

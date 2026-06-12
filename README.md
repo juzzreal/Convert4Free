@@ -30,24 +30,23 @@ javac -d out src\*.java
 Desktop UI:
 
 ```powershell
-java -cp out Convert4Free
+java -jar Convert4Free.jar
 ```
 
 Command line conversion:
 
 ```powershell
-java -cp out Convert4Free input.mkv output.mp4
+java -jar Convert4Free.jar input.mkv output.mp4
 ```
 
 Update from GitHub:
 
 ```powershell
-java -cp out Convert4Free --update
+java -jar Convert4Free.jar --update
 ```
 
 ## Installer
 
 ```powershell
-javac Convert4FreeInstaller.java
-java Convert4FreeInstaller
+java -jar Convert4FreeInstaller.jar
 ```

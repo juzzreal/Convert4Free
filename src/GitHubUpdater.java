@@ -33,9 +33,10 @@ public class GitHubUpdater {
         log(logger, "");
         log(logger, "Recompiling Convert4Free...");
         compileProject(projectFolder, logger);
+        buildProgramJar(projectFolder, logger);
 
         log(logger, "");
-        log(logger, "Update complete. Restart Convert4Free to use the newest version.");
+        log(logger, "Update complete. Restart Convert4Free.jar to use the newest version.");
     }
 
     private void updateFromZip(Path projectFolder, Consumer<String> logger) {
@@ -55,7 +56,9 @@ public class GitHubUpdater {
         log(logger, "Downloading: " + REPOSITORY_ZIP_URL);
         Path zipFile = Files.createTempFile("convert4free-update", ".zip");
 
-        HttpClient client = HttpClient.newHttpClient();
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
         HttpRequest request = HttpRequest.newBuilder(URI.create(REPOSITORY_ZIP_URL)).GET().build();
         HttpResponse<Path> response = client.send(request, HttpResponse.BodyHandlers.ofFile(zipFile));
 
@@ -116,8 +119,30 @@ public class GitHubUpdater {
         runCommand(command, logger);
     }
 
+    private void buildProgramJar(Path projectFolder, Consumer<String> logger) {
+        log(logger, "Building Convert4Free.jar...");
+        runCommand(
+                List.of(
+                        "jar",
+                        "--create",
+                        "--file",
+                        "Convert4Free.jar",
+                        "--main-class",
+                        "Convert4Free",
+                        "-C",
+                        "out",
+                        "."),
+                logger,
+                projectFolder);
+    }
+
     private void runCommand(List<String> command, Consumer<String> logger) {
+        runCommand(command, logger, Path.of("").toAbsolutePath());
+    }
+
+    private void runCommand(List<String> command, Consumer<String> logger, Path workingFolder) {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.directory(workingFolder.toFile());
         processBuilder.redirectErrorStream(true);
 
         try {

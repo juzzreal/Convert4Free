@@ -285,14 +285,14 @@ public class Convert4FreeWindow extends JFrame {
                 Choose an input .mkv file and an output .mp4 path, then click Convert.
 
                 Command line:
-                  java Convert4Free
-                  java Convert4Free --ui
-                  java Convert4Free --update
-                  java Convert4Free input.mkv output.mp4
-                  java Convert4Free input.mkv output.mp4 --overwrite
-                  java Convert4Free --credits
-                  java Convert4Free --changelog
-                  java Convert4Free --help
+                  java -jar Convert4Free.jar
+                  java -jar Convert4Free.jar --ui
+                  java -jar Convert4Free.jar --update
+                  java -jar Convert4Free.jar input.mkv output.mp4
+                  java -jar Convert4Free.jar input.mkv output.mp4 --overwrite
+                  java -jar Convert4Free.jar --credits
+                  java -jar Convert4Free.jar --changelog
+                  java -jar Convert4Free.jar --help
                 """;
     }
 
