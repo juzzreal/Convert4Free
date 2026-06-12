@@ -30,7 +30,7 @@ public class VideoConverter {
         command.add(overwrite ? "-y" : "-n");
         command.add("-i");
         command.add(inputFile.toString());
-        command.addAll(conversionType.ffmpegOptions());
+        command.addAll(ffmpegOptions(inputFile, conversionType, logger));
         command.add(outputFile.toString());
 
         log(logger, "Starting FFmpeg...");
@@ -57,9 +57,101 @@ public class VideoConverter {
 
     private String successMessage(ConversionType conversionType) {
         return switch (conversionType) {
-            case MKV_TO_MP4, MP4_TO_MOV -> "Original video/audio quality was preserved by stream copying.";
+            case MKV_TO_MP4 -> "Created an After Effects friendly MP4 with AAC stereo audio.";
+            case MP4_TO_MOV -> "Original video/audio quality was preserved by stream copying.";
             case MP4_TO_MP3 -> "Audio was extracted and encoded as MP3.";
         };
+    }
+
+    private List<String> ffmpegOptions(Path inputFile, ConversionType conversionType, Consumer<String> logger) {
+        return switch (conversionType) {
+            case MKV_TO_MP4 -> afterEffectsMp4Options(inputFile, logger);
+            case MP4_TO_MOV -> List.of("-c", "copy");
+            case MP4_TO_MP3 -> List.of("-vn", "-codec:a", "libmp3lame", "-q:a", "2");
+        };
+    }
+
+    private List<String> afterEffectsMp4Options(Path inputFile, Consumer<String> logger) {
+        int audioStreamCount = countAudioStreams(inputFile, logger);
+        List<String> options = new ArrayList<>();
+
+        options.add("-map");
+        options.add("0:v:0");
+
+        if (audioStreamCount == 0) {
+            log(logger, "No audio tracks found. Exporting video only.");
+            options.add("-c:v");
+            options.add("copy");
+            options.add("-an");
+            options.add("-movflags");
+            options.add("+faststart");
+            return options;
+        }
+
+        if (audioStreamCount == 1) {
+            log(logger, "Found 1 audio track. Converting it to AAC stereo for After Effects.");
+            options.add("-map");
+            options.add("0:a:0");
+        } else {
+            log(logger, "Found " + audioStreamCount + " audio tracks. Mixing them into one AAC stereo track.");
+            options.add("-filter_complex");
+            options.add(audioMixFilter(audioStreamCount));
+            options.add("-map");
+            options.add("[aout]");
+        }
+
+        options.add("-c:v");
+        options.add("copy");
+        options.add("-c:a");
+        options.add("aac");
+        options.add("-b:a");
+        options.add("320k");
+        options.add("-ac");
+        options.add("2");
+        options.add("-movflags");
+        options.add("+faststart");
+        return options;
+    }
+
+    private String audioMixFilter(int audioStreamCount) {
+        StringBuilder filter = new StringBuilder();
+        for (int index = 0; index < audioStreamCount; index++) {
+            filter.append("[0:a:").append(index).append("]");
+        }
+        filter.append("amix=inputs=")
+                .append(audioStreamCount)
+                .append(":duration=longest:normalize=0[aout]");
+        return filter.toString();
+    }
+
+    private int countAudioStreams(Path inputFile, Consumer<String> logger) {
+        log(logger, "Checking audio tracks...");
+        ProcessResult result = runCommand(
+                List.of(
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "a",
+                        "-show_entries",
+                        "stream=index",
+                        "-of",
+                        "csv=p=0",
+                        inputFile.toString()),
+                null);
+
+        if (result.exitCode() != 0) {
+            log(logger, "ffprobe could not count audio tracks. Falling back to first audio track.");
+            return 1;
+        }
+
+        int count = 0;
+        for (String line : result.outputLines()) {
+            if (!line.isBlank()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void checkFfmpegInstalled(Consumer<String> logger) {

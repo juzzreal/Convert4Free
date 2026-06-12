@@ -2,6 +2,11 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.3.0");
+        System.out.println("- Improved MKV to MP4 for After Effects");
+        System.out.println("- Converts MKV audio to AAC stereo");
+        System.out.println("- Mixes multiple MKV audio tracks into one editing-friendly track");
+        System.out.println();
         System.out.println("Version 0.2.0");
         System.out.println("- Added MP4 to MOV conversion");
         System.out.println("- Added MP4 to MP3 audio extraction");

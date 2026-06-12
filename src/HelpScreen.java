@@ -15,11 +15,12 @@ public class HelpScreen {
         System.out.println("  java -jar Convert4Free.jar --help");
         System.out.println();
         System.out.println("Supported conversions:");
-        System.out.println("  MKV to MP4");
+        System.out.println("  MKV to MP4 (After Effects friendly)");
         System.out.println("  MP4 to MOV");
         System.out.println("  MP4 to MP3");
         System.out.println();
         System.out.println("Notes:");
+        System.out.println("  MKV to MP4 creates one AAC stereo audio track for editing apps.");
         System.out.println("  Video container conversions use FFmpeg stream copying when possible.");
         System.out.println("  MP4 to MP3 extracts the audio track and encodes it as MP3.");
         System.out.println();

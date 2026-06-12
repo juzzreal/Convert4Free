@@ -1,8 +1,12 @@
-import java.util.List;
 import java.util.Locale;
 
 public enum ConversionType {
-    MKV_TO_MP4("MKV to MP4", ".mkv", ".mp4", "Video remux", "Copies video and audio when MP4 supports the codecs."),
+    MKV_TO_MP4(
+            "MKV to MP4 (After Effects)",
+            ".mkv",
+            ".mp4",
+            "Editing-friendly MP4",
+            "Copies video when possible and creates one AAC stereo audio track for editing apps."),
     MP4_TO_MOV("MP4 to MOV", ".mp4", ".mov", "Video remux", "Copies video and audio into a MOV container."),
     MP4_TO_MP3("MP4 to MP3", ".mp4", ".mp3", "Audio extract", "Extracts audio and encodes it as MP3.");
 
@@ -36,17 +40,10 @@ public enum ConversionType {
         return description;
     }
 
-    public List<String> ffmpegOptions() {
-        return switch (this) {
-            case MKV_TO_MP4, MP4_TO_MOV -> List.of("-c", "copy");
-            case MP4_TO_MP3 -> List.of("-vn", "-codec:a", "libmp3lame", "-q:a", "2");
-        };
-    }
-
     public String compatibilityHelp() {
         return switch (this) {
             case MKV_TO_MP4 ->
-                    "The video or audio codec may not be compatible with the MP4 container. Re-encoding may be needed.";
+                    "The video codec may not be compatible with MP4, or the audio layout could not be converted.";
             case MP4_TO_MOV ->
                     "The video or audio codec may not be compatible with the MOV container. Re-encoding may be needed.";
             case MP4_TO_MP3 ->

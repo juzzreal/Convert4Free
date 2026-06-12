@@ -350,7 +350,7 @@ public class Convert4FreeWindow extends JFrame {
                 Powered by FFmpeg
                 Built with Java
 
-                Version: 0.2.0
+                Version: 0.3.0
                 ==============================
                 """;
     }
@@ -358,6 +358,11 @@ public class Convert4FreeWindow extends JFrame {
     private String changelogText() {
         return """
                 Convert4Free Changelog
+
+                Version 0.3.0
+                - Improved MKV to MP4 for After Effects
+                - Converts MKV audio to AAC stereo
+                - Mixes multiple MKV audio tracks into one editing-friendly track
 
                 Version 0.2.0
                 - Added MP4 to MOV conversion

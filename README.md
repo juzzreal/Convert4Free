@@ -4,9 +4,12 @@ A simple Java video converter by Juzzreal.
 
 Convert4Free uses FFmpeg and supports:
 
-- MKV to MP4
+- MKV to MP4 for editing apps like After Effects
 - MP4 to MOV
 - MP4 to MP3
+
+MKV to MP4 keeps the video stream when possible and creates one AAC stereo audio
+track, so clips import more reliably into editing software.
 
 ## Note
 
