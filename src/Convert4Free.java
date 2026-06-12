@@ -24,6 +24,18 @@ public class Convert4Free {
             return;
         }
 
+        if (args.length == 1 && "--update".equalsIgnoreCase(args[0])) {
+            try {
+                GitHubUpdater updater = new GitHubUpdater();
+                updater.updateFromGitHub(System.out::println);
+            } catch (ConversionException exception) {
+                System.out.println("Update failed.");
+                System.out.println(exception.getMessage());
+                System.exit(1);
+            }
+            return;
+        }
+
         if (args.length < 2 || args.length > 3) {
             System.out.println("Invalid command.");
             System.out.println();

@@ -11,5 +11,6 @@ public class ChangelogScreen {
         System.out.println("- Added basic file validation");
         System.out.println("- Added overwrite protection");
         System.out.println("- Added desktop UI");
+        System.out.println("- Added GitHub updater");
     }
 }

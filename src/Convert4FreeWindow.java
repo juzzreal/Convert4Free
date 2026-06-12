@@ -37,7 +37,7 @@ public class Convert4FreeWindow extends JFrame {
     }
 
     private Convert4FreeWindow() {
-        super("Convert4Free by Fady");
+        super("Convert4Free by Juzzreal");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(760, 500));
         setLocationRelativeTo(null);
@@ -55,7 +55,7 @@ public class Convert4FreeWindow extends JFrame {
         JLabel title = new JLabel("Convert4Free");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 28f));
 
-        JLabel subtitle = new JLabel("MKV to MP4 converter by Fady");
+        JLabel subtitle = new JLabel("MKV to MP4 converter by Juzzreal");
         subtitle.setFont(subtitle.getFont().deriveFont(14f));
 
         header.add(title, BorderLayout.NORTH);
@@ -102,15 +102,18 @@ public class Convert4FreeWindow extends JFrame {
         JButton helpButton = new JButton("Help");
         JButton changelogButton = new JButton("Changelog");
         JButton creditsButton = new JButton("Credits");
+        JButton updateButton = new JButton("Update");
 
         helpButton.addActionListener(event -> showMessage("Help", helpText()));
         changelogButton.addActionListener(event -> showMessage("Changelog", changelogText()));
         creditsButton.addActionListener(event -> showMessage("Credits", creditsText()));
+        updateButton.addActionListener(event -> startUpdate());
         convertButton.addActionListener(event -> startConversion());
 
         buttonBar.add(helpButton);
         buttonBar.add(changelogButton);
         buttonBar.add(creditsButton);
+        buttonBar.add(updateButton);
         buttonBar.add(convertButton);
         return buttonBar;
     }
@@ -228,6 +231,44 @@ public class Convert4FreeWindow extends JFrame {
         worker.execute();
     }
 
+    private void startUpdate() {
+        convertButton.setEnabled(false);
+        logArea.setText("");
+        appendLog("Starting update...");
+
+        SwingWorker<Void, String> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                GitHubUpdater updater = new GitHubUpdater();
+                updater.updateFromGitHub(this::publish);
+                return null;
+            }
+
+            @Override
+            protected void process(java.util.List<String> chunks) {
+                for (String chunk : chunks) {
+                    appendLog(chunk);
+                }
+            }
+
+            @Override
+            protected void done() {
+                convertButton.setEnabled(true);
+                try {
+                    get();
+                    showMessage("Update complete", "Update complete. Restart Convert4Free to use the newest version.");
+                } catch (Exception exception) {
+                    Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+                    appendLog("Update failed.");
+                    appendLog(cause.getMessage());
+                    showMessage("Update failed", cause.getMessage());
+                }
+            }
+        };
+
+        worker.execute();
+    }
+
     private void appendLog(String message) {
         logArea.append(message + System.lineSeparator());
         logArea.setCaretPosition(logArea.getDocument().getLength());
@@ -246,6 +287,7 @@ public class Convert4FreeWindow extends JFrame {
                 Command line:
                   java Convert4Free
                   java Convert4Free --ui
+                  java Convert4Free --update
                   java Convert4Free input.mkv output.mp4
                   java Convert4Free input.mkv output.mp4 --overwrite
                   java Convert4Free --credits
@@ -262,7 +304,8 @@ public class Convert4FreeWindow extends JFrame {
 
                 A simple, free video converter.
 
-                Created by Fady
+                Created by Juzzreal
+                AI worked on this project
 
                 Powered by FFmpeg
                 Built with Java
@@ -285,6 +328,7 @@ public class Convert4FreeWindow extends JFrame {
                 - Added basic file validation
                 - Added overwrite protection
                 - Added desktop UI
+                - Added GitHub updater
                 """;
     }
 }

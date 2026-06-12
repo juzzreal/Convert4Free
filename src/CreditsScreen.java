@@ -6,7 +6,8 @@ public class CreditsScreen {
         System.out.println();
         System.out.println("A simple, free video converter.");
         System.out.println();
-        System.out.println("Created by Fady");
+        System.out.println("Created by Juzzreal");
+        System.out.println("AI worked on this project");
         System.out.println();
         System.out.println("Powered by FFmpeg");
         System.out.println("Built with Java");
