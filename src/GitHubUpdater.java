@@ -16,6 +16,9 @@ import java.util.zip.ZipInputStream;
 public class GitHubUpdater {
     private static final String REPOSITORY_ZIP_URL =
             "https://github.com/juzzreal/Convert4Free/archive/refs/heads/main.zip";
+    private static final String PROGRAM_JAR = "Convert4Free.jar";
+    private static final String UPDATE_JAR = "Convert4Free.jar.update";
+    private static final String UPDATE_SCRIPT = "finish-update.bat";
 
     public void updateFromGitHub(Consumer<String> logger) {
         Path projectFolder = Path.of("").toAbsolutePath();
@@ -34,9 +37,12 @@ public class GitHubUpdater {
         log(logger, "Recompiling Convert4Free...");
         compileProject(projectFolder, logger);
         buildProgramJar(projectFolder, logger);
+        scheduleJarReplacement(projectFolder, logger);
 
         log(logger, "");
-        log(logger, "Update complete. Restart Convert4Free.jar to use the newest version.");
+        log(logger, "Update prepared.");
+        log(logger, "Close Convert4Free now. The updater will replace Convert4Free.jar after the app exits.");
+        log(logger, "Then start Convert4Free again to use the newest version.");
     }
 
     private void updateFromZip(Path projectFolder, Consumer<String> logger) {
@@ -75,7 +81,7 @@ public class GitHubUpdater {
             ZipEntry entry;
             while ((entry = zipInputStream.getNextEntry()) != null) {
                 String name = stripRootFolder(entry.getName());
-                if (name.isBlank()) {
+                if (name.isBlank() || shouldSkipZipEntry(name)) {
                     continue;
                 }
 
@@ -102,6 +108,15 @@ public class GitHubUpdater {
         return zipEntryName.substring(slashIndex + 1);
     }
 
+    private boolean shouldSkipZipEntry(String name) {
+        String normalizedName = name.replace('\\', '/');
+        return normalizedName.equals(PROGRAM_JAR)
+                || normalizedName.equals("installer.jar")
+                || normalizedName.equals("Convert4FreeInstaller.jar")
+                || normalizedName.startsWith("build/")
+                || normalizedName.startsWith("out/");
+    }
+
     private void compileProject(Path projectFolder, Consumer<String> logger) {
         List<String> command = new ArrayList<>();
         command.add("javac");
@@ -120,13 +135,13 @@ public class GitHubUpdater {
     }
 
     private void buildProgramJar(Path projectFolder, Consumer<String> logger) {
-        log(logger, "Building Convert4Free.jar...");
+        log(logger, "Building updated app jar...");
         runCommand(
                 List.of(
                         "jar",
                         "--create",
                         "--file",
-                        "Convert4Free.jar",
+                        UPDATE_JAR,
                         "--main-class",
                         "Convert4Free",
                         "-C",
@@ -134,6 +149,40 @@ public class GitHubUpdater {
                         "."),
                 logger,
                 projectFolder);
+    }
+
+    private void scheduleJarReplacement(Path projectFolder, Consumer<String> logger) {
+        try {
+            Path scriptPath = projectFolder.resolve(UPDATE_SCRIPT);
+            long currentProcessId = ProcessHandle.current().pid();
+            String script = """
+                    @echo off
+                    cd /d "%s"
+                    :wait
+                    tasklist /FI "PID eq %d" | find "%d" >nul
+                    if not errorlevel 1 (
+                      timeout /t 1 /nobreak >nul
+                      goto wait
+                    )
+                    move /Y "%s" "%s" >nul
+                    del "%%~f0"
+                    """.formatted(
+                    projectFolder,
+                    currentProcessId,
+                    currentProcessId,
+                    UPDATE_JAR,
+                    PROGRAM_JAR);
+
+            Files.writeString(scriptPath, script);
+
+            ProcessBuilder processBuilder = new ProcessBuilder("cmd", "/c", "start", "", "/min", scriptPath.toString());
+            processBuilder.directory(projectFolder.toFile());
+            processBuilder.start();
+
+            log(logger, "Replacement script created: " + scriptPath);
+        } catch (IOException exception) {
+            throw new ConversionException("Could not schedule jar replacement: " + exception.getMessage());
+        }
     }
 
     private void runCommand(List<String> command, Consumer<String> logger) {
