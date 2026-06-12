@@ -3,7 +3,7 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 public class FileValidator {
-    public static void validateInputFile(String inputPath) {
+    public static void validateInputFile(String inputPath, ConversionType conversionType) {
         Path inputFile = Path.of(inputPath);
 
         if (!Files.exists(inputFile)) {
@@ -14,17 +14,17 @@ public class FileValidator {
             throw new IllegalArgumentException("Input path is not a regular file: " + inputPath);
         }
 
-        if (!hasExtension(inputPath, ".mkv")) {
-            throw new IllegalArgumentException("Input file must end with .mkv");
+        if (!hasExtension(inputPath, conversionType.inputExtension())) {
+            throw new IllegalArgumentException("Input file must end with " + conversionType.inputExtension());
         }
     }
 
-    public static void validateOutputFile(String outputPath, boolean overwrite) {
+    public static void validateOutputFile(String outputPath, ConversionType conversionType, boolean overwrite) {
         Path outputFile = Path.of(outputPath);
         Path parent = outputFile.toAbsolutePath().getParent();
 
-        if (!hasExtension(outputPath, ".mp4")) {
-            throw new IllegalArgumentException("Output file must end with .mp4");
+        if (!hasExtension(outputPath, conversionType.outputExtension())) {
+            throw new IllegalArgumentException("Output file must end with " + conversionType.outputExtension());
         }
 
         if (parent != null && !Files.exists(parent)) {

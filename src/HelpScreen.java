@@ -7,16 +7,22 @@ public class HelpScreen {
         System.out.println("  java -jar Convert4Free.jar --ui");
         System.out.println("  java -jar Convert4Free.jar --update");
         System.out.println("  java -jar Convert4Free.jar input.mkv output.mp4");
+        System.out.println("  java -jar Convert4Free.jar input.mp4 output.mov");
+        System.out.println("  java -jar Convert4Free.jar input.mp4 output.mp3");
         System.out.println("  java -jar Convert4Free.jar input.mkv output.mp4 --overwrite");
         System.out.println("  java -jar Convert4Free.jar --credits");
         System.out.println("  java -jar Convert4Free.jar --changelog");
         System.out.println("  java -jar Convert4Free.jar --help");
         System.out.println();
-        System.out.println("Notes:");
-        System.out.println("  Convert4Free uses FFmpeg with stream copying:");
-        System.out.println("  ffmpeg -i input.mkv -c copy output.mp4");
+        System.out.println("Supported conversions:");
+        System.out.println("  MKV to MP4");
+        System.out.println("  MP4 to MOV");
+        System.out.println("  MP4 to MP3");
         System.out.println();
-        System.out.println("  This avoids loading the video into Java memory and preserves quality");
-        System.out.println("  when the video/audio codecs are compatible with MP4.");
+        System.out.println("Notes:");
+        System.out.println("  Video container conversions use FFmpeg stream copying when possible.");
+        System.out.println("  MP4 to MP3 extracts the audio track and encodes it as MP3.");
+        System.out.println();
+        System.out.println("  Java does not load the whole video into RAM.");
     }
 }

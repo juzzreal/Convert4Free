@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -23,6 +24,7 @@ import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 public class Convert4FreeWindow extends JFrame {
+    private final JComboBox<ConversionType> conversionTypeBox = new JComboBox<>(ConversionType.values());
     private final JTextField inputField = new JTextField();
     private final JTextField outputField = new JTextField();
     private final JTextArea logArea = new JTextArea();
@@ -39,7 +41,7 @@ public class Convert4FreeWindow extends JFrame {
     private Convert4FreeWindow() {
         super("Convert4Free by Juzzreal");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(760, 500));
+        setMinimumSize(new Dimension(820, 560));
         setLocationRelativeTo(null);
 
         add(createHeader(), BorderLayout.NORTH);
@@ -55,7 +57,7 @@ public class Convert4FreeWindow extends JFrame {
         JLabel title = new JLabel("Convert4Free");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 28f));
 
-        JLabel subtitle = new JLabel("MKV to MP4 converter by Juzzreal");
+        JLabel subtitle = new JLabel("Video and audio converter by Juzzreal");
         subtitle.setFont(subtitle.getFont().deriveFont(14f));
 
         header.add(title, BorderLayout.NORTH);
@@ -72,11 +74,27 @@ public class Convert4FreeWindow extends JFrame {
         constraints.insets = new Insets(6, 0, 6, 8);
         constraints.fill = GridBagConstraints.HORIZONTAL;
 
-        addFileRow(formPanel, constraints, 0, "Input MKV:", inputField, "Browse...", this::chooseInputFile);
-        addFileRow(formPanel, constraints, 1, "Output MP4:", outputField, "Save as...", this::chooseOutputFile);
+        constraints.gridwidth = 1;
+        constraints.weightx = 0;
+        constraints.gridx = 0;
+        constraints.gridy = 0;
+        formPanel.add(new JLabel("Convert:"), constraints);
 
         constraints.gridx = 1;
-        constraints.gridy = 2;
+        constraints.weightx = 1;
+        constraints.gridwidth = 2;
+        formPanel.add(conversionTypeBox, constraints);
+
+        conversionTypeBox.addActionListener(event -> {
+            updateOutputSuggestion();
+            appendLog("Mode changed to " + selectedConversionType() + ".");
+        });
+
+        addFileRow(formPanel, constraints, 1, "Input file:", inputField, "Browse...", this::chooseInputFile);
+        addFileRow(formPanel, constraints, 2, "Output file:", outputField, "Save as...", this::chooseOutputFile);
+
+        constraints.gridx = 1;
+        constraints.gridy = 3;
         constraints.weightx = 1;
         constraints.gridwidth = 2;
         formPanel.add(overwriteBox, constraints);
@@ -85,7 +103,7 @@ public class Convert4FreeWindow extends JFrame {
         logArea.setLineWrap(true);
         logArea.setWrapStyleWord(true);
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        logArea.setText("Ready.\nChoose an .mkv file and an .mp4 output path.\n");
+        logArea.setText("Ready.\nChoose a conversion mode, select an input file, then click Convert.\n");
 
         JScrollPane logScrollPane = new JScrollPane(logArea);
         logScrollPane.setBorder(BorderFactory.createTitledBorder("Status"));
@@ -145,50 +163,65 @@ public class Convert4FreeWindow extends JFrame {
     }
 
     private void chooseInputFile() {
+        ConversionType conversionType = selectedConversionType();
         JFileChooser chooser = new JFileChooser();
-        chooser.setFileFilter(new FileNameExtensionFilter("MKV video files", "mkv"));
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                conversionType.inputExtension().toUpperCase().substring(1) + " files",
+                conversionType.inputExtension().substring(1)));
 
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File inputFile = chooser.getSelectedFile();
             inputField.setText(inputFile.getAbsolutePath());
-
-            if (outputField.getText().isBlank()) {
-                outputField.setText(suggestOutputPath(inputFile));
-            }
+            outputField.setText(suggestOutputPath(inputFile, conversionType));
         }
     }
 
     private void chooseOutputFile() {
+        ConversionType conversionType = selectedConversionType();
         JFileChooser chooser = new JFileChooser();
-        chooser.setFileFilter(new FileNameExtensionFilter("MP4 video files", "mp4"));
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                conversionType.outputExtension().toUpperCase().substring(1) + " files",
+                conversionType.outputExtension().substring(1)));
 
         if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File outputFile = chooser.getSelectedFile();
             String path = outputFile.getAbsolutePath();
-            if (!path.toLowerCase().endsWith(".mp4")) {
-                path = path + ".mp4";
+            if (!path.toLowerCase().endsWith(conversionType.outputExtension())) {
+                path = path + conversionType.outputExtension();
             }
             outputField.setText(path);
         }
     }
 
-    private String suggestOutputPath(File inputFile) {
+    private String suggestOutputPath(File inputFile, ConversionType conversionType) {
         String path = inputFile.getAbsolutePath();
         int dotIndex = path.lastIndexOf('.');
         if (dotIndex >= 0) {
-            return path.substring(0, dotIndex) + ".mp4";
+            return path.substring(0, dotIndex) + conversionType.outputExtension();
         }
-        return path + ".mp4";
+        return path + conversionType.outputExtension();
+    }
+
+    private void updateOutputSuggestion() {
+        String inputPath = inputField.getText().trim();
+        if (!inputPath.isBlank()) {
+            outputField.setText(suggestOutputPath(new File(inputPath), selectedConversionType()));
+        }
+    }
+
+    private ConversionType selectedConversionType() {
+        return (ConversionType) conversionTypeBox.getSelectedItem();
     }
 
     private void startConversion() {
+        ConversionType conversionType = selectedConversionType();
         String inputPath = inputField.getText().trim();
         String outputPath = outputField.getText().trim();
         boolean overwrite = overwriteBox.isSelected();
 
         try {
-            FileValidator.validateInputFile(inputPath);
-            FileValidator.validateOutputFile(outputPath, overwrite);
+            FileValidator.validateInputFile(inputPath, conversionType);
+            FileValidator.validateOutputFile(outputPath, conversionType, overwrite);
         } catch (IllegalArgumentException exception) {
             showMessage("Invalid input", exception.getMessage());
             return;
@@ -202,7 +235,7 @@ public class Convert4FreeWindow extends JFrame {
             @Override
             protected Void doInBackground() {
                 VideoConverter converter = new VideoConverter();
-                converter.convertMkvToMp4(Path.of(inputPath), Path.of(outputPath), overwrite, this::publish);
+                converter.convert(Path.of(inputPath), Path.of(outputPath), conversionType, overwrite, this::publish);
                 return null;
             }
 
@@ -282,13 +315,20 @@ public class Convert4FreeWindow extends JFrame {
         return """
                 Convert4Free Help
 
-                Choose an input .mkv file and an output .mp4 path, then click Convert.
+                Choose a conversion mode, select an input file and output file, then click Convert.
+
+                Supported conversions:
+                  MKV to MP4
+                  MP4 to MOV
+                  MP4 to MP3
 
                 Command line:
                   java -jar Convert4Free.jar
                   java -jar Convert4Free.jar --ui
                   java -jar Convert4Free.jar --update
                   java -jar Convert4Free.jar input.mkv output.mp4
+                  java -jar Convert4Free.jar input.mp4 output.mov
+                  java -jar Convert4Free.jar input.mp4 output.mp3
                   java -jar Convert4Free.jar input.mkv output.mp4 --overwrite
                   java -jar Convert4Free.jar --credits
                   java -jar Convert4Free.jar --changelog
@@ -310,7 +350,7 @@ public class Convert4FreeWindow extends JFrame {
                 Powered by FFmpeg
                 Built with Java
 
-                Version: 0.1.0
+                Version: 0.2.0
                 ==============================
                 """;
     }
@@ -318,6 +358,12 @@ public class Convert4FreeWindow extends JFrame {
     private String changelogText() {
         return """
                 Convert4Free Changelog
+
+                Version 0.2.0
+                - Added MP4 to MOV conversion
+                - Added MP4 to MP3 audio extraction
+                - Redesigned the desktop UI for multiple conversion modes
+                - Added automatic output extension suggestions
 
                 Version 0.1.0
                 - Added MKV to MP4 conversion

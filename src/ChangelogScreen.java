@@ -2,6 +2,12 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.2.0");
+        System.out.println("- Added MP4 to MOV conversion");
+        System.out.println("- Added MP4 to MP3 audio extraction");
+        System.out.println("- Redesigned the desktop UI for multiple conversion modes");
+        System.out.println("- Added automatic output extension suggestions");
+        System.out.println();
         System.out.println("Version 0.1.0");
         System.out.println("- Added MKV to MP4 conversion");
         System.out.println("- Added audio and video stream preservation using FFmpeg");

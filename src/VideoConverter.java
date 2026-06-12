@@ -10,18 +10,19 @@ import java.util.List;
 import java.util.function.Consumer;
 
 public class VideoConverter {
-    public void convertMkvToMp4(Path inputFile, Path outputFile, boolean overwrite) {
-        convertMkvToMp4(inputFile, outputFile, overwrite, System.out::println);
+    public void convert(Path inputFile, Path outputFile, ConversionType conversionType, boolean overwrite) {
+        convert(inputFile, outputFile, conversionType, overwrite, System.out::println);
     }
 
-    public void convertMkvToMp4(Path inputFile, Path outputFile, boolean overwrite, Consumer<String> logger) {
+    public void convert(Path inputFile, Path outputFile, ConversionType conversionType, boolean overwrite, Consumer<String> logger) {
         checkFfmpegInstalled(logger);
 
         log(logger, "Convert4Free");
-        log(logger, "Preparing MKV to MP4 conversion...");
+        log(logger, "Preparing " + conversionType + " conversion...");
         log(logger, "Input:  " + inputFile);
         log(logger, "Output: " + outputFile);
-        log(logger, "Mode:   stream copy/remux when possible");
+        log(logger, "Mode:   " + conversionType.mode());
+        log(logger, "Info:   " + conversionType.description());
         log(logger, "");
 
         List<String> command = new ArrayList<>();
@@ -29,12 +30,11 @@ public class VideoConverter {
         command.add(overwrite ? "-y" : "-n");
         command.add("-i");
         command.add(inputFile.toString());
-        command.add("-c");
-        command.add("copy");
+        command.addAll(conversionType.ffmpegOptions());
         command.add(outputFile.toString());
 
         log(logger, "Starting FFmpeg...");
-        log(logger, "This keeps CPU, power, and RAM usage low by copying compatible streams.");
+        log(logger, "Convert4Free lets FFmpeg stream-process the file directly from disk.");
         log(logger, "");
 
         // FFmpeg reads and writes the video files directly. Java only starts the
@@ -44,17 +44,22 @@ public class VideoConverter {
         if (result.exitCode() == 0) {
             log(logger, "");
             log(logger, "Conversion completed successfully.");
-            log(logger, "Original audio/video quality was preserved by stream copying.");
+            log(logger, successMessage(conversionType));
             return;
         }
 
         throw new ConversionException(
-                "FFmpeg could not remux this file into MP4 using stream copy.\n"
-                        + "The video or audio codec may not be compatible with the MP4 container.\n"
-                        + "A future version of Convert4Free can add a re-encoding mode for this case.\n"
-                        + "For now, you may need to re-encode with FFmpeg manually.\n\n"
+                "FFmpeg could not complete the " + conversionType + " conversion.\n"
+                        + conversionType.compatibilityHelp() + "\n\n"
                         + "FFmpeg exit code: " + result.exitCode() + "\n"
                         + result.lastOutputLines());
+    }
+
+    private String successMessage(ConversionType conversionType) {
+        return switch (conversionType) {
+            case MKV_TO_MP4, MP4_TO_MOV -> "Original video/audio quality was preserved by stream copying.";
+            case MP4_TO_MP3 -> "Audio was extracted and encoded as MP3.";
+        };
     }
 
     private void checkFfmpegInstalled(Consumer<String> logger) {

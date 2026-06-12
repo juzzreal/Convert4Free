@@ -2,13 +2,11 @@
 
 A simple Java video converter by Juzzreal.
 
-Convert4Free converts `.mkv` files to `.mp4` files using FFmpeg. It tries to
-preserve the original video and audio quality by copying compatible streams
-instead of re-encoding:
+Convert4Free uses FFmpeg and supports:
 
-```text
-ffmpeg -i input.mkv -c copy output.mp4
-```
+- MKV to MP4
+- MP4 to MOV
+- MP4 to MP3
 
 ## Note
 
@@ -37,6 +35,8 @@ Command line conversion:
 
 ```powershell
 java -jar Convert4Free.jar input.mkv output.mp4
+java -jar Convert4Free.jar input.mp4 output.mov
+java -jar Convert4Free.jar input.mp4 output.mp3
 ```
 
 Update from GitHub:

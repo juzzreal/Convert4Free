@@ -1,7 +1,7 @@
 import java.nio.file.Path;
 
 public class Convert4Free {
-    private static final String VERSION = "0.1.0";
+    private static final String VERSION = "0.2.0";
 
     public static void main(String[] args) {
         if (args.length == 0 || (args.length == 1 && "--ui".equalsIgnoreCase(args[0]))) {
@@ -55,11 +55,12 @@ public class Convert4Free {
         String outputPath = args[1];
 
         try {
-            FileValidator.validateInputFile(inputPath);
-            FileValidator.validateOutputFile(outputPath, overwrite);
+            ConversionType conversionType = ConversionType.fromPaths(inputPath, outputPath);
+            FileValidator.validateInputFile(inputPath, conversionType);
+            FileValidator.validateOutputFile(outputPath, conversionType, overwrite);
 
             VideoConverter converter = new VideoConverter();
-            converter.convertMkvToMp4(Path.of(inputPath), Path.of(outputPath), overwrite);
+            converter.convert(Path.of(inputPath), Path.of(outputPath), conversionType, overwrite);
         } catch (ConversionException exception) {
             System.out.println("Conversion failed.");
             System.out.println(exception.getMessage());
