@@ -3,7 +3,8 @@
 Simple Java media converter by Juzzreal.
 
 Convert4Free uses FFmpeg and includes 50+ presets for video, audio, web,
-legacy, animation, and editing-friendly exports.
+legacy, animation, and editing-friendly exports. It can inspect files with
+multiple audio tracks and lets you choose which tracks to convert.
 
 AI worked on this project.
 

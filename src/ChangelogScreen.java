@@ -2,6 +2,14 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.6.0");
+        System.out.println("- Added media analysis after choosing a file");
+        System.out.println("- Added audio track names, languages, codecs, and channel info");
+        System.out.println("- Added audio track selection before conversion");
+        System.out.println("- Added audio preview for individual tracks");
+        System.out.println("- Added progress bar with time remaining estimate");
+        System.out.println("- Converter now keeps, skips, or mixes selected audio tracks");
+        System.out.println();
         System.out.println("Version 0.5.3");
         System.out.println("- Rebuilt the status area");
         System.out.println("- Added clear step-by-step progress text");

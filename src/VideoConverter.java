@@ -25,6 +25,17 @@ public class VideoConverter {
             boolean overwrite,
             ConversionSettings settings,
             Consumer<String> logger) {
+        convert(inputFile, outputFile, conversionType, overwrite, settings, logger, null);
+    }
+
+    public void convert(
+            Path inputFile,
+            Path outputFile,
+            ConversionType conversionType,
+            boolean overwrite,
+            ConversionSettings settings,
+            Consumer<String> logger,
+            Consumer<ConversionProgress> progressListener) {
         checkFfmpegInstalled(logger);
 
         log(logger, "Convert4Free");
@@ -42,6 +53,11 @@ public class VideoConverter {
         command.add("-i");
         command.add(inputFile.toString());
         command.addAll(ffmpegOptions(inputFile, conversionType, settings, logger));
+        if (progressListener != null) {
+            command.add("-progress");
+            command.add("pipe:1");
+            command.add("-nostats");
+        }
         command.add(outputFile.toString());
 
         log(logger, "Starting FFmpeg...");
@@ -50,7 +66,7 @@ public class VideoConverter {
 
         // FFmpeg reads and writes the video files directly. Java only starts the
         // process and prints status text, so the video is never loaded into RAM.
-        ProcessResult result = runCommand(command, logger);
+        ProcessResult result = runCommand(command, logger, progressListener);
 
         if (result.exitCode() == 0) {
             log(logger, "");
@@ -86,26 +102,26 @@ public class VideoConverter {
             Consumer<String> logger) {
         return switch (conversionType.profile()) {
             case EDITING_MP4 -> afterEffectsMp4Options(inputFile, settings, logger);
-            case VIDEO_MP4, VIDEO_MOV, VIDEO_MKV, VIDEO_AVI -> h264VideoOptions(conversionType, settings);
-            case VIDEO_WEBM -> webmVideoOptions(settings);
+            case VIDEO_MP4, VIDEO_MOV, VIDEO_MKV, VIDEO_AVI -> h264VideoOptions(inputFile, conversionType, settings, logger);
+            case VIDEO_WEBM -> webmVideoOptions(inputFile, settings, logger);
             case GIF -> gifOptions();
-            case AUDIO_MP3 -> audioOptions("libmp3lame", settings.audioBitrate(), settings);
-            case AUDIO_AAC -> audioOptions("aac", settings.audioBitrate(), settings);
-            case AUDIO_WAV -> wavOptions(settings);
-            case AUDIO_FLAC -> flacOptions(settings);
-            case AUDIO_OGG -> audioOptions("libvorbis", qualityVorbisBitrate(settings), settings);
+            case AUDIO_MP3 -> audioOptions(inputFile, "libmp3lame", settings.audioBitrate(), settings, logger);
+            case AUDIO_AAC -> audioOptions(inputFile, "aac", settings.audioBitrate(), settings, logger);
+            case AUDIO_WAV -> wavOptions(inputFile, settings, logger);
+            case AUDIO_FLAC -> flacOptions(inputFile, settings, logger);
+            case AUDIO_OGG -> audioOptions(inputFile, "libvorbis", qualityVorbisBitrate(settings), settings, logger);
         };
     }
 
     private List<String> afterEffectsMp4Options(Path inputFile, ConversionSettings settings, Consumer<String> logger) {
-        int audioStreamCount = countAudioStreams(inputFile, logger);
+        List<Integer> audioTracks = selectedAudioTracks(inputFile, settings, logger);
         List<String> options = new ArrayList<>();
 
         options.add("-map");
         options.add("0:v:0");
 
-        if (audioStreamCount == 0) {
-            log(logger, "No audio tracks found. Exporting video only.");
+        if (audioTracks.isEmpty()) {
+            log(logger, "No audio tracks selected. Exporting video only.");
             options.add("-c:v");
             options.add("copy");
             options.add("-an");
@@ -114,14 +130,14 @@ public class VideoConverter {
             return options;
         }
 
-        if (audioStreamCount == 1) {
-            log(logger, "Found 1 audio track. Converting it to AAC stereo for After Effects.");
+        if (audioTracks.size() == 1) {
+            log(logger, "Using 1 selected audio track. Converting it to AAC stereo for editing apps.");
             options.add("-map");
-            options.add("0:a:0");
+            options.add("0:a:" + audioTracks.get(0));
         } else {
-            log(logger, "Found " + audioStreamCount + " audio tracks. Mixing them into one AAC stereo track.");
+            log(logger, "Mixing " + audioTracks.size() + " selected audio tracks into one AAC stereo track.");
             options.add("-filter_complex");
-            options.add(audioMixFilter(audioStreamCount));
+            options.add(audioMixFilter(audioTracks));
             options.add("-map");
             options.add("[aout]");
         }
@@ -143,12 +159,16 @@ public class VideoConverter {
         return options;
     }
 
-    private List<String> h264VideoOptions(ConversionType conversionType, ConversionSettings settings) {
+    private List<String> h264VideoOptions(
+            Path inputFile,
+            ConversionType conversionType,
+            ConversionSettings settings,
+            Consumer<String> logger) {
+        List<Integer> audioTracks = selectedAudioTracks(inputFile, settings, logger);
         List<String> options = new ArrayList<>();
         options.add("-map");
         options.add("0:v:0");
-        options.add("-map");
-        options.add("0:a?");
+        addSelectedAudioMaps(options, audioTracks);
         options.add("-c:v");
         options.add(settings.copyWhenPossible() ? "copy" : "libx264");
         if (!settings.copyWhenPossible()) {
@@ -157,33 +177,26 @@ public class VideoConverter {
             options.add("-preset");
             options.add("medium");
         }
-        options.add("-c:a");
-        options.add("aac");
-        options.add("-b:a");
-        options.add(settings.audioBitrate());
-        addAudioChannelOptions(options, settings);
+        addVideoAudioOptions(options, "aac", settings.audioBitrate(), settings, audioTracks);
         if (conversionType.profile() == ConversionProfile.VIDEO_MP4 || conversionType.profile() == ConversionProfile.VIDEO_MOV) {
             addFastStart(options, settings);
         }
         return options;
     }
 
-    private List<String> webmVideoOptions(ConversionSettings settings) {
+    private List<String> webmVideoOptions(Path inputFile, ConversionSettings settings, Consumer<String> logger) {
+        List<Integer> audioTracks = selectedAudioTracks(inputFile, settings, logger);
         List<String> options = new ArrayList<>();
         options.add("-map");
         options.add("0:v:0");
-        options.add("-map");
-        options.add("0:a?");
+        addSelectedAudioMaps(options, audioTracks);
         options.add("-c:v");
         options.add("libvpx-vp9");
         options.add("-crf");
         options.add(settings.videoCrf());
         options.add("-b:v");
         options.add("0");
-        options.add("-c:a");
-        options.add("libopus");
-        options.add("-b:a");
-        options.add(settings.audioBitrate());
+        addVideoAudioOptions(options, "libopus", settings.audioBitrate(), settings, audioTracks);
         return options;
     }
 
@@ -191,9 +204,19 @@ public class VideoConverter {
         return List.of("-vf", "fps=12,scale=720:-1:flags=lanczos", "-loop", "0", "-an");
     }
 
-    private List<String> audioOptions(String codec, String bitrate, ConversionSettings settings) {
+    private List<String> audioOptions(
+            Path inputFile,
+            String codec,
+            String bitrate,
+            ConversionSettings settings,
+            Consumer<String> logger) {
+        List<Integer> audioTracks = selectedAudioTracks(inputFile, settings, logger);
+        if (audioTracks.isEmpty()) {
+            throw new ConversionException("No audio tracks selected.");
+        }
         List<String> options = new ArrayList<>();
         options.add("-vn");
+        addAudioOutputMapping(options, audioTracks);
         options.add("-c:a");
         options.add(codec);
         options.add("-b:a");
@@ -202,22 +225,73 @@ public class VideoConverter {
         return options;
     }
 
-    private List<String> wavOptions(ConversionSettings settings) {
+    private List<String> wavOptions(Path inputFile, ConversionSettings settings, Consumer<String> logger) {
+        List<Integer> audioTracks = selectedAudioTracks(inputFile, settings, logger);
+        if (audioTracks.isEmpty()) {
+            throw new ConversionException("No audio tracks selected.");
+        }
         List<String> options = new ArrayList<>();
         options.add("-vn");
+        addAudioOutputMapping(options, audioTracks);
         options.add("-c:a");
         options.add("pcm_s16le");
         addAudioChannelOptions(options, settings);
         return options;
     }
 
-    private List<String> flacOptions(ConversionSettings settings) {
+    private List<String> flacOptions(Path inputFile, ConversionSettings settings, Consumer<String> logger) {
+        List<Integer> audioTracks = selectedAudioTracks(inputFile, settings, logger);
+        if (audioTracks.isEmpty()) {
+            throw new ConversionException("No audio tracks selected.");
+        }
         List<String> options = new ArrayList<>();
         options.add("-vn");
+        addAudioOutputMapping(options, audioTracks);
         options.add("-c:a");
         options.add("flac");
         addAudioChannelOptions(options, settings);
         return options;
+    }
+
+    private void addSelectedAudioMaps(List<String> options, List<Integer> audioTracks) {
+        if (audioTracks.isEmpty()) {
+            options.add("-an");
+            return;
+        }
+
+        for (Integer audioTrack : audioTracks) {
+            options.add("-map");
+            options.add("0:a:" + audioTrack);
+        }
+    }
+
+    private void addVideoAudioOptions(
+            List<String> options,
+            String codec,
+            String bitrate,
+            ConversionSettings settings,
+            List<Integer> audioTracks) {
+        if (audioTracks.isEmpty()) {
+            return;
+        }
+        options.add("-c:a");
+        options.add(codec);
+        options.add("-b:a");
+        options.add(bitrate);
+        addAudioChannelOptions(options, settings);
+    }
+
+    private void addAudioOutputMapping(List<String> options, List<Integer> audioTracks) {
+        if (audioTracks.size() == 1) {
+            options.add("-map");
+            options.add("0:a:" + audioTracks.get(0));
+            return;
+        }
+
+        options.add("-filter_complex");
+        options.add(audioMixFilter(audioTracks));
+        options.add("-map");
+        options.add("[aout]");
     }
 
     private void addAudioChannelOptions(List<String> options, ConversionSettings settings) {
@@ -242,15 +316,28 @@ public class VideoConverter {
         };
     }
 
-    private String audioMixFilter(int audioStreamCount) {
+    private String audioMixFilter(List<Integer> audioTracks) {
         StringBuilder filter = new StringBuilder();
-        for (int index = 0; index < audioStreamCount; index++) {
-            filter.append("[0:a:").append(index).append("]");
+        for (Integer audioTrack : audioTracks) {
+            filter.append("[0:a:").append(audioTrack).append("]");
         }
         filter.append("amix=inputs=")
-                .append(audioStreamCount)
+                .append(audioTracks.size())
                 .append(":duration=longest:normalize=0[aout]");
         return filter.toString();
+    }
+
+    private List<Integer> selectedAudioTracks(Path inputFile, ConversionSettings settings, Consumer<String> logger) {
+        if (settings.customAudioSelection()) {
+            return settings.selectedAudioTracks();
+        }
+
+        int audioStreamCount = countAudioStreams(inputFile, logger);
+        List<Integer> audioTracks = new ArrayList<>();
+        for (int index = 0; index < audioStreamCount; index++) {
+            audioTracks.add(index);
+        }
+        return audioTracks;
     }
 
     private int countAudioStreams(Path inputFile, Consumer<String> logger) {
@@ -297,14 +384,21 @@ public class VideoConverter {
     }
 
     private ProcessResult runCommand(List<String> command, Consumer<String> logger) {
+        return runCommand(command, logger, null);
+    }
+
+    private ProcessResult runCommand(
+            List<String> command,
+            Consumer<String> logger,
+            Consumer<ConversionProgress> progressListener) {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
 
         try {
             Process process = processBuilder.start();
             // FFmpeg writes most status information to stderr, so both streams
             // are read to prevent the process from getting stuck.
-            OutputCollector stdout = new OutputCollector(process.getInputStream(), logger);
-            OutputCollector stderr = new OutputCollector(process.getErrorStream(), logger);
+            OutputCollector stdout = new OutputCollector(process.getInputStream(), logger, progressListener);
+            OutputCollector stderr = new OutputCollector(process.getErrorStream(), logger, null);
 
             Thread stdoutThread = new Thread(stdout);
             Thread stderrThread = new Thread(stderr);
@@ -339,11 +433,16 @@ public class VideoConverter {
 
         private final InputStream inputStream;
         private final Consumer<String> logger;
+        private final Consumer<ConversionProgress> progressListener;
         private final List<String> lines = Collections.synchronizedList(new ArrayList<>());
 
-        OutputCollector(InputStream inputStream, Consumer<String> logger) {
+        OutputCollector(
+                InputStream inputStream,
+                Consumer<String> logger,
+                Consumer<ConversionProgress> progressListener) {
             this.inputStream = inputStream;
             this.logger = logger;
+            this.progressListener = progressListener;
         }
 
         @Override
@@ -353,6 +452,9 @@ public class VideoConverter {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     remember(line);
+                    if (handleProgress(line)) {
+                        continue;
+                    }
                     if (logger != null) {
                         logger.accept(line);
                     }
@@ -371,6 +473,31 @@ public class VideoConverter {
             if (lines.size() > MAX_STORED_LINES) {
                 lines.remove(0);
             }
+        }
+
+        private boolean handleProgress(String line) {
+            if (progressListener == null) {
+                return false;
+            }
+
+            if (line.startsWith("out_time_us=") || line.startsWith("out_time_ms=")) {
+                int equals = line.indexOf('=');
+                if (equals > 0) {
+                    try {
+                        double seconds = Long.parseLong(line.substring(equals + 1).trim()) / 1_000_000.0;
+                        progressListener.accept(new ConversionProgress(seconds));
+                    } catch (NumberFormatException ignored) {
+                        // Ignore malformed progress values.
+                    }
+                }
+                return true;
+            }
+
+            return line.startsWith("progress=")
+                    || line.startsWith("bitrate=")
+                    || line.startsWith("speed=")
+                    || line.startsWith("total_size=")
+                    || line.startsWith("out_time=");
         }
     }
 

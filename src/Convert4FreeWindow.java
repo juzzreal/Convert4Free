@@ -11,6 +11,8 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -22,6 +24,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -46,6 +49,8 @@ public class Convert4FreeWindow extends JFrame {
     private final JTextField inputField = new JTextField();
     private final JTextField outputField = new JTextField();
     private final JTextArea logArea = new JTextArea();
+    private final JPanel audioTracksPanel = new JPanel();
+    private final List<JCheckBox> audioTrackBoxes = new ArrayList<>();
     private final JCheckBox overwriteBox = new JCheckBox("Replace output file if it already exists");
     private final JCheckBox fastStartBox = new JCheckBox("Optimize MP4/MOV for faster playback", true);
     private final JCheckBox stereoAudioBox = new JCheckBox("Make audio stereo", true);
@@ -59,6 +64,8 @@ public class Convert4FreeWindow extends JFrame {
     private final JLabel convertStepLabel = new JLabel();
     private final JLabel doneStepLabel = new JLabel();
     private final JLabel detailsLabel = new JLabel("Technical details");
+    private final JProgressBar progressBar = new JProgressBar(0, 100);
+    private final JLabel progressTextLabel = new JLabel("Progress will appear during conversion.");
     private final JLabel modeDescriptionLabel = new JLabel();
     private final JButton inputButton = new JButton("Choose");
     private final JButton outputButton = new JButton("Save as");
@@ -67,6 +74,8 @@ public class Convert4FreeWindow extends JFrame {
 
     private ConversionType selectedConversionType = ConversionType.MKV_TO_MP4_EDIT;
     private File selectedInputFile;
+    private MediaInfo currentMediaInfo = MediaInfo.empty();
+    private long conversionStartMillis;
 
     public static void open() {
         SwingUtilities.invokeLater(() -> {
@@ -172,7 +181,11 @@ public class Convert4FreeWindow extends JFrame {
         body.add(Box.createVerticalStrut(10));
         body.add(createModePanel());
         body.add(Box.createVerticalStrut(14));
-        body.add(sectionTitle("3. Settings"));
+        body.add(sectionTitle("3. Audio tracks"));
+        body.add(Box.createVerticalStrut(10));
+        body.add(createAudioTracksPanel());
+        body.add(Box.createVerticalStrut(14));
+        body.add(sectionTitle("4. Settings"));
         body.add(Box.createVerticalStrut(10));
         body.add(createSettingsPanel());
         body.add(Box.createVerticalStrut(14));
@@ -187,8 +200,28 @@ public class Convert4FreeWindow extends JFrame {
         convertButton.addActionListener(event -> startConversion());
         body.add(convertButton);
 
-        panel.add(body, BorderLayout.NORTH);
+        JScrollPane workflowScroll = new JScrollPane(body);
+        workflowScroll.setBorder(null);
+        workflowScroll.getViewport().setOpaque(false);
+        workflowScroll.setOpaque(false);
+        panel.add(workflowScroll, BorderLayout.CENTER);
         return panel;
+    }
+
+    private JPanel createAudioTracksPanel() {
+        audioTracksPanel.setOpaque(false);
+        audioTracksPanel.setLayout(new BoxLayout(audioTracksPanel, BoxLayout.Y_AXIS));
+        setAudioTracksMessage("Choose a file to see audio tracks.");
+        return audioTracksPanel;
+    }
+
+    private void setAudioTracksMessage(String message) {
+        audioTracksPanel.removeAll();
+        JLabel label = new JLabel(message);
+        label.setForeground(MUTED);
+        audioTracksPanel.add(label);
+        audioTracksPanel.revalidate();
+        audioTracksPanel.repaint();
     }
 
     private JPanel createSettingsPanel() {
@@ -324,9 +357,18 @@ public class Convert4FreeWindow extends JFrame {
         statusTitleLabel.setFont(statusTitleLabel.getFont().deriveFont(Font.BOLD, 20f));
         statusDetailLabel.setForeground(MUTED);
         statusDetailLabel.setFont(statusDetailLabel.getFont().deriveFont(13f));
+        progressBar.setValue(0);
+        progressBar.setStringPainted(true);
+        progressBar.setString("0%");
+        progressTextLabel.setForeground(MUTED);
+        progressTextLabel.setFont(progressTextLabel.getFont().deriveFont(12f));
         friendlyStatus.add(statusTitleLabel);
         friendlyStatus.add(Box.createVerticalStrut(4));
         friendlyStatus.add(statusDetailLabel);
+        friendlyStatus.add(Box.createVerticalStrut(10));
+        friendlyStatus.add(progressBar);
+        friendlyStatus.add(Box.createVerticalStrut(4));
+        friendlyStatus.add(progressTextLabel);
 
         JPanel stepsPanel = new JPanel();
         stepsPanel.setOpaque(false);
@@ -410,11 +452,112 @@ public class Convert4FreeWindow extends JFrame {
             setAvailableModes(ConversionType.forInputPath(inputFile.getName()));
             outputField.setText(suggestOutputPath(inputFile, selectedConversionType));
             outputButton.setEnabled(true);
-            convertButton.setEnabled(true);
             setFriendlyStatus("File detected", inputFile.getName() + " can be converted to " + availableTargetsText() + ".");
             updateStepLabels("done", "active", "waiting", "waiting");
             appendLog("Selected input: " + inputFile.getAbsolutePath());
+            startMediaAnalysis(inputFile);
         }
+    }
+
+    private void startMediaAnalysis(File inputFile) {
+        currentMediaInfo = MediaInfo.empty();
+        audioTrackBoxes.clear();
+        convertButton.setEnabled(false);
+        setAudioTracksMessage("Reading audio tracks...");
+        progressBar.setValue(0);
+        progressBar.setString("0%");
+        progressTextLabel.setText("Reading media information.");
+
+        SwingWorker<MediaInfo, String> worker = new SwingWorker<>() {
+            @Override
+            protected MediaInfo doInBackground() {
+                return MediaProbe.probe(inputFile.toPath());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    currentMediaInfo = get();
+                    populateAudioTracks(currentMediaInfo);
+                    if (currentMediaInfo.durationSeconds() > 0) {
+                        progressTextLabel.setText("Duration: " + formatTime(currentMediaInfo.durationSeconds()) + ".");
+                    } else {
+                        progressTextLabel.setText("Duration could not be detected.");
+                    }
+                    convertButton.setEnabled(true);
+                } catch (Exception exception) {
+                    setAudioTracksMessage("Could not read audio tracks.");
+                    convertButton.setEnabled(true);
+                    appendLog("Could not read media info: " + exception.getMessage());
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void populateAudioTracks(MediaInfo mediaInfo) {
+        audioTracksPanel.removeAll();
+        audioTrackBoxes.clear();
+
+        if (mediaInfo.audioTracks().isEmpty()) {
+            setAudioTracksMessage("No audio tracks found.");
+            return;
+        }
+
+        for (AudioTrack track : mediaInfo.audioTracks()) {
+            JPanel row = new JPanel(new BorderLayout(8, 0));
+            row.setOpaque(false);
+
+            JCheckBox checkBox = new JCheckBox(track.displayName(), true);
+            checkBox.setOpaque(false);
+            checkBox.setForeground(TEXT);
+            checkBox.putClientProperty("audioTrack", track);
+            audioTrackBoxes.add(checkBox);
+
+            JButton previewButton = new JButton("Preview");
+            styleSecondaryButton(previewButton);
+            previewButton.addActionListener(event -> previewAudioTrack(track, previewButton));
+
+            row.add(checkBox, BorderLayout.CENTER);
+            row.add(previewButton, BorderLayout.EAST);
+            audioTracksPanel.add(row);
+            audioTracksPanel.add(Box.createVerticalStrut(6));
+        }
+
+        audioTracksPanel.revalidate();
+        audioTracksPanel.repaint();
+        appendLog("Detected " + mediaInfo.audioTracks().size() + " audio track(s).");
+    }
+
+    private void previewAudioTrack(AudioTrack track, JButton button) {
+        if (selectedInputFile == null) {
+            return;
+        }
+
+        button.setEnabled(false);
+        appendLog("Previewing " + track.displayName());
+
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                AudioPreviewer.play(selectedInputFile.toPath(), track.audioOrder());
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                button.setEnabled(true);
+                try {
+                    get();
+                    setFriendlyStatus("Preview playing", "You are hearing the selected audio track for up to 15 seconds.");
+                } catch (Exception exception) {
+                    Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+                    showMessage("Preview failed", cause.getMessage());
+                    appendLog("Preview failed: " + cause.getMessage());
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void chooseOutputFile() {
@@ -504,6 +647,10 @@ public class Convert4FreeWindow extends JFrame {
 
         setBusy(true, "Converting");
         logArea.setText("");
+        conversionStartMillis = System.currentTimeMillis();
+        progressBar.setValue(0);
+        progressBar.setString("0%");
+        progressTextLabel.setText("Starting conversion.");
         setFriendlyStatus("Conversion running", "FFmpeg is processing your file. You can follow details below.");
         updateStepLabels("done", "done", "active", "waiting");
         appendLog("Starting " + conversionType + "...");
@@ -512,7 +659,14 @@ public class Convert4FreeWindow extends JFrame {
             @Override
             protected Void doInBackground() {
                 VideoConverter converter = new VideoConverter();
-                converter.convert(Path.of(inputPath), Path.of(outputPath), conversionType, overwrite, settings, this::publish);
+                converter.convert(
+                        Path.of(inputPath),
+                        Path.of(outputPath),
+                        conversionType,
+                        overwrite,
+                        settings,
+                        this::publish,
+                        progress -> SwingUtilities.invokeLater(() -> updateProgress(progress)));
                 return null;
             }
 
@@ -529,12 +683,17 @@ public class Convert4FreeWindow extends JFrame {
                 try {
                     get();
                     setStatus("Complete");
+                    progressBar.setIndeterminate(false);
+                    progressBar.setValue(100);
+                    progressBar.setString("100%");
+                    progressTextLabel.setText("Finished.");
                     setFriendlyStatus("Conversion complete", "Your new file is ready.");
                     updateStepLabels("done", "done", "done", "done");
                     showMessage("Done", "Conversion completed successfully.");
                 } catch (Exception exception) {
                     Throwable cause = exception.getCause() == null ? exception : exception.getCause();
                     setStatus("Failed");
+                    progressBar.setIndeterminate(false);
                     setFriendlyStatus("Conversion failed", "Check the details below for the FFmpeg message.");
                     updateStepLabels("done", "done", "error", "waiting");
                     appendLog("Conversion failed.");
@@ -612,7 +771,20 @@ public class Convert4FreeWindow extends JFrame {
                 (String) qualityBox.getSelectedItem(),
                 fastStartBox.isSelected(),
                 stereoAudioBox.isSelected(),
-                copyVideoBox.isSelected());
+                copyVideoBox.isSelected(),
+                true,
+                selectedAudioTrackOrders());
+    }
+
+    private List<Integer> selectedAudioTrackOrders() {
+        List<Integer> selected = new ArrayList<>();
+        for (JCheckBox checkBox : audioTrackBoxes) {
+            if (checkBox.isSelected()) {
+                AudioTrack track = (AudioTrack) checkBox.getClientProperty("audioTrack");
+                selected.add(track.audioOrder());
+            }
+        }
+        return selected;
     }
 
     private void setStatus(String status) {
@@ -627,6 +799,39 @@ public class Convert4FreeWindow extends JFrame {
     private void appendLog(String message) {
         logArea.append(message + System.lineSeparator());
         logArea.setCaretPosition(logArea.getDocument().getLength());
+    }
+
+    private void updateProgress(ConversionProgress progress) {
+        double duration = currentMediaInfo.durationSeconds();
+        double processed = progress.processedSeconds();
+        if (duration <= 0 || processed <= 0) {
+            progressBar.setIndeterminate(true);
+            progressTextLabel.setText("Working...");
+            return;
+        }
+
+        progressBar.setIndeterminate(false);
+        int percent = (int) Math.max(0, Math.min(100, Math.round((processed / duration) * 100)));
+        progressBar.setValue(percent);
+        progressBar.setString(percent + "%");
+
+        long elapsedMillis = Math.max(1, System.currentTimeMillis() - conversionStartMillis);
+        double speed = processed / (elapsedMillis / 1000.0);
+        double remaining = Math.max(0, duration - processed);
+        String eta = speed > 0 ? formatTime(remaining / speed) : "unknown";
+        progressTextLabel.setText(
+                "Processed " + formatTime(processed) + " of " + formatTime(duration) + " - about " + eta + " left.");
+    }
+
+    private String formatTime(double seconds) {
+        int totalSeconds = (int) Math.max(0, Math.round(seconds));
+        int hours = totalSeconds / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int secs = totalSeconds % 60;
+        if (hours > 0) {
+            return String.format("%d:%02d:%02d", hours, minutes, secs);
+        }
+        return String.format("%d:%02d", minutes, secs);
     }
 
     private void updateStepLabels(String input, String output, String convert, String done) {
@@ -738,6 +943,7 @@ public class Convert4FreeWindow extends JFrame {
                 4. Click Convert.
 
                 Convert4Free now includes more than 50 converter presets.
+                Files with multiple audio tracks can be inspected before converting.
 
                 Command line:
                   java -jar Convert4Free.jar input.mkv output.mp4
@@ -763,6 +969,13 @@ public class Convert4FreeWindow extends JFrame {
     private String changelogText() {
         return """
                 Convert4Free Changelog
+
+                Version 0.6.0
+                - Added media analysis after choosing a file
+                - Added audio track names, languages, codecs, and channel info
+                - Added audio track selection before conversion
+                - Added audio preview for individual tracks
+                - Added progress bar with time remaining estimate
 
                 Version 0.5.3
                 - Rebuilt the status area
@@ -820,6 +1033,15 @@ public class Convert4FreeWindow extends JFrame {
                 <body>
                   <h1>Update Log</h1>
                   <div class="sub">Convert4Free <span class="badge">v%s</span></div>
+                  <div class="version">
+                    <h2>0.6.0</h2>
+                    <ul>
+                      <li>Added audio track detection with names, languages, codecs, and channels.</li>
+                      <li>You can now choose which audio tracks are used for conversion.</li>
+                      <li>Individual audio tracks can be previewed before converting.</li>
+                      <li>Added a progress bar with a time remaining estimate.</li>
+                    </ul>
+                  </div>
                   <div class="version">
                     <h2>0.5.3</h2>
                     <ul>
