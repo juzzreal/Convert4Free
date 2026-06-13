@@ -15,14 +15,13 @@ public class HelpScreen {
         System.out.println("  java -jar Convert4Free.jar --help");
         System.out.println();
         System.out.println("Supported conversions:");
-        System.out.println("  MKV to MP4 (After Effects friendly)");
-        System.out.println("  MP4 to MOV");
-        System.out.println("  MP4 to MP3");
+        System.out.println("  More than 50 presets for video, audio, web, legacy, animation, and editing outputs.");
+        System.out.println("  Supported input extensions:");
+        System.out.println("  " + ConversionType.supportedInputExtensions());
         System.out.println();
         System.out.println("Notes:");
+        System.out.println("  The desktop app detects the input file and shows possible outputs.");
         System.out.println("  MKV to MP4 creates one AAC stereo audio track for editing apps.");
-        System.out.println("  Video container conversions use FFmpeg stream copying when possible.");
-        System.out.println("  MP4 to MP3 extracts the audio track and encodes it as MP3.");
         System.out.println();
         System.out.println("  Java does not load the whole video into RAM.");
     }

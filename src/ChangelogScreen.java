@@ -2,6 +2,13 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.5.0");
+        System.out.println("- Added more than 50 converter presets");
+        System.out.println("- Added video, audio, web, legacy, animation, and editing outputs");
+        System.out.println("- Added quality and audio/video settings");
+        System.out.println("- Improved the file-first conversion flow");
+        System.out.println("- Simplified the README");
+        System.out.println();
         System.out.println("Version 0.4.1");
         System.out.println("- File-first desktop workflow");
         System.out.println("- The app now detects the selected input format");

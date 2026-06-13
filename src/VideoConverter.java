@@ -11,10 +11,20 @@ import java.util.function.Consumer;
 
 public class VideoConverter {
     public void convert(Path inputFile, Path outputFile, ConversionType conversionType, boolean overwrite) {
-        convert(inputFile, outputFile, conversionType, overwrite, System.out::println);
+        convert(inputFile, outputFile, conversionType, overwrite, ConversionSettings.defaults(), System.out::println);
     }
 
     public void convert(Path inputFile, Path outputFile, ConversionType conversionType, boolean overwrite, Consumer<String> logger) {
+        convert(inputFile, outputFile, conversionType, overwrite, ConversionSettings.defaults(), logger);
+    }
+
+    public void convert(
+            Path inputFile,
+            Path outputFile,
+            ConversionType conversionType,
+            boolean overwrite,
+            ConversionSettings settings,
+            Consumer<String> logger) {
         checkFfmpegInstalled(logger);
 
         log(logger, "Convert4Free");
@@ -23,6 +33,7 @@ public class VideoConverter {
         log(logger, "Output: " + outputFile);
         log(logger, "Mode:   " + conversionType.mode());
         log(logger, "Info:   " + conversionType.description());
+        log(logger, "Quality: " + settings.quality());
         log(logger, "");
 
         List<String> command = new ArrayList<>();
@@ -30,7 +41,7 @@ public class VideoConverter {
         command.add(overwrite ? "-y" : "-n");
         command.add("-i");
         command.add(inputFile.toString());
-        command.addAll(ffmpegOptions(inputFile, conversionType, logger));
+        command.addAll(ffmpegOptions(inputFile, conversionType, settings, logger));
         command.add(outputFile.toString());
 
         log(logger, "Starting FFmpeg...");
@@ -56,22 +67,37 @@ public class VideoConverter {
     }
 
     private String successMessage(ConversionType conversionType) {
-        return switch (conversionType) {
-            case MKV_TO_MP4 -> "Created an After Effects friendly MP4 with AAC stereo audio.";
-            case MP4_TO_MOV -> "Original video/audio quality was preserved by stream copying.";
-            case MP4_TO_MP3 -> "Audio was extracted and encoded as MP3.";
+        if (conversionType.profile() == ConversionProfile.EDITING_MP4) {
+            return "Created an editing-friendly MP4 with AAC stereo audio.";
+        }
+        if (conversionType.isAudioOnlyOutput()) {
+            return "Audio conversion completed successfully.";
+        }
+        if (conversionType.profile() == ConversionProfile.GIF) {
+            return "Animated GIF created successfully.";
+        }
+        return "Video conversion completed successfully.";
+    }
+
+    private List<String> ffmpegOptions(
+            Path inputFile,
+            ConversionType conversionType,
+            ConversionSettings settings,
+            Consumer<String> logger) {
+        return switch (conversionType.profile()) {
+            case EDITING_MP4 -> afterEffectsMp4Options(inputFile, settings, logger);
+            case VIDEO_MP4, VIDEO_MOV, VIDEO_MKV, VIDEO_AVI -> h264VideoOptions(conversionType, settings);
+            case VIDEO_WEBM -> webmVideoOptions(settings);
+            case GIF -> gifOptions();
+            case AUDIO_MP3 -> audioOptions("libmp3lame", settings.audioBitrate(), settings);
+            case AUDIO_AAC -> audioOptions("aac", settings.audioBitrate(), settings);
+            case AUDIO_WAV -> wavOptions(settings);
+            case AUDIO_FLAC -> flacOptions(settings);
+            case AUDIO_OGG -> audioOptions("libvorbis", qualityVorbisBitrate(settings), settings);
         };
     }
 
-    private List<String> ffmpegOptions(Path inputFile, ConversionType conversionType, Consumer<String> logger) {
-        return switch (conversionType) {
-            case MKV_TO_MP4 -> afterEffectsMp4Options(inputFile, logger);
-            case MP4_TO_MOV -> List.of("-c", "copy");
-            case MP4_TO_MP3 -> List.of("-vn", "-codec:a", "libmp3lame", "-q:a", "2");
-        };
-    }
-
-    private List<String> afterEffectsMp4Options(Path inputFile, Consumer<String> logger) {
+    private List<String> afterEffectsMp4Options(Path inputFile, ConversionSettings settings, Consumer<String> logger) {
         int audioStreamCount = countAudioStreams(inputFile, logger);
         List<String> options = new ArrayList<>();
 
@@ -101,16 +127,119 @@ public class VideoConverter {
         }
 
         options.add("-c:v");
-        options.add("copy");
+        options.add(settings.copyWhenPossible() ? "copy" : "libx264");
+        if (!settings.copyWhenPossible()) {
+            options.add("-crf");
+            options.add(settings.videoCrf());
+            options.add("-preset");
+            options.add("medium");
+        }
         options.add("-c:a");
         options.add("aac");
         options.add("-b:a");
-        options.add("320k");
-        options.add("-ac");
-        options.add("2");
-        options.add("-movflags");
-        options.add("+faststart");
+        options.add(settings.audioBitrate());
+        addAudioChannelOptions(options, settings);
+        addFastStart(options, settings);
         return options;
+    }
+
+    private List<String> h264VideoOptions(ConversionType conversionType, ConversionSettings settings) {
+        List<String> options = new ArrayList<>();
+        options.add("-map");
+        options.add("0:v:0");
+        options.add("-map");
+        options.add("0:a?");
+        options.add("-c:v");
+        options.add(settings.copyWhenPossible() ? "copy" : "libx264");
+        if (!settings.copyWhenPossible()) {
+            options.add("-crf");
+            options.add(settings.videoCrf());
+            options.add("-preset");
+            options.add("medium");
+        }
+        options.add("-c:a");
+        options.add("aac");
+        options.add("-b:a");
+        options.add(settings.audioBitrate());
+        addAudioChannelOptions(options, settings);
+        if (conversionType.profile() == ConversionProfile.VIDEO_MP4 || conversionType.profile() == ConversionProfile.VIDEO_MOV) {
+            addFastStart(options, settings);
+        }
+        return options;
+    }
+
+    private List<String> webmVideoOptions(ConversionSettings settings) {
+        List<String> options = new ArrayList<>();
+        options.add("-map");
+        options.add("0:v:0");
+        options.add("-map");
+        options.add("0:a?");
+        options.add("-c:v");
+        options.add("libvpx-vp9");
+        options.add("-crf");
+        options.add(settings.videoCrf());
+        options.add("-b:v");
+        options.add("0");
+        options.add("-c:a");
+        options.add("libopus");
+        options.add("-b:a");
+        options.add(settings.audioBitrate());
+        return options;
+    }
+
+    private List<String> gifOptions() {
+        return List.of("-vf", "fps=12,scale=720:-1:flags=lanczos", "-loop", "0", "-an");
+    }
+
+    private List<String> audioOptions(String codec, String bitrate, ConversionSettings settings) {
+        List<String> options = new ArrayList<>();
+        options.add("-vn");
+        options.add("-c:a");
+        options.add(codec);
+        options.add("-b:a");
+        options.add(bitrate);
+        addAudioChannelOptions(options, settings);
+        return options;
+    }
+
+    private List<String> wavOptions(ConversionSettings settings) {
+        List<String> options = new ArrayList<>();
+        options.add("-vn");
+        options.add("-c:a");
+        options.add("pcm_s16le");
+        addAudioChannelOptions(options, settings);
+        return options;
+    }
+
+    private List<String> flacOptions(ConversionSettings settings) {
+        List<String> options = new ArrayList<>();
+        options.add("-vn");
+        options.add("-c:a");
+        options.add("flac");
+        addAudioChannelOptions(options, settings);
+        return options;
+    }
+
+    private void addAudioChannelOptions(List<String> options, ConversionSettings settings) {
+        if (settings.stereoAudio()) {
+            options.add("-ac");
+            options.add("2");
+        }
+    }
+
+    private void addFastStart(List<String> options, ConversionSettings settings) {
+        if (settings.fastStart()) {
+            options.add("-movflags");
+            options.add("+faststart");
+        }
+    }
+
+    private String qualityVorbisBitrate(ConversionSettings settings) {
+        return switch (settings.quality()) {
+            case "High quality" -> "256k";
+            case "Small file" -> "96k";
+            default -> "160k";
+        };
     }
 
     private String audioMixFilter(int audioStreamCount) {

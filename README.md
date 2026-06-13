@@ -1,58 +1,26 @@
 # Convert4Free
 
-A simple Java video converter by Juzzreal.
+Simple Java media converter by Juzzreal.
 
-Convert4Free uses FFmpeg and supports:
-
-- MKV to MP4 for editing apps like After Effects
-- MP4 to MOV
-- MP4 to MP3
-
-MKV to MP4 keeps the video stream when possible and creates one AAC stereo audio
-track, so clips import more reliably into editing software.
-
-Version 0.4.1 uses a file-first UI: choose a file, then Convert4Free shows the
-formats that file can be converted to.
-
-## Note
+Convert4Free uses FFmpeg and includes 50+ presets for video, audio, web,
+legacy, animation, and editing-friendly exports.
 
 AI worked on this project.
 
-## Requirements
-
-- Java JDK
-- FFmpeg in PATH
-
-## Build
-
-```powershell
-javac -d out src\*.java
-```
-
 ## Run
-
-Desktop UI:
 
 ```powershell
 java -jar Convert4Free.jar
 ```
 
-Command line conversion:
+## Build
 
 ```powershell
-java -jar Convert4Free.jar input.mkv output.mp4
-java -jar Convert4Free.jar input.mp4 output.mov
-java -jar Convert4Free.jar input.mp4 output.mp3
+javac -d out src\*.java
+jar --create --file Convert4Free.jar --main-class Convert4Free -C out .
 ```
 
-Update from GitHub:
+## Needs
 
-```powershell
-java -jar Convert4Free.jar --update
-```
-
-## Installer
-
-```powershell
-java -jar Convert4FreeInstaller.jar
-```
+- Java JDK
+- FFmpeg in PATH

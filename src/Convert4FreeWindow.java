@@ -20,6 +20,7 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JEditorPane;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -51,6 +52,10 @@ public class Convert4FreeWindow extends JFrame {
     private final JTextField outputField = new JTextField();
     private final JTextArea logArea = new JTextArea();
     private final JCheckBox overwriteBox = new JCheckBox("Replace output file if it already exists");
+    private final JCheckBox fastStartBox = new JCheckBox("Optimize MP4/MOV for faster playback", true);
+    private final JCheckBox stereoAudioBox = new JCheckBox("Make audio stereo", true);
+    private final JCheckBox copyVideoBox = new JCheckBox("Copy video when possible", true);
+    private final JComboBox<String> qualityBox = new JComboBox<>(new String[] {"Balanced", "High quality", "Small file"});
     private final JLabel statusLabel = new JLabel("Ready");
     private final JLabel statusTitleLabel = new JLabel("Choose a file to begin");
     private final JLabel statusDetailLabel = new JLabel("Convert4Free will detect the format and show what you can convert it into.");
@@ -60,7 +65,7 @@ public class Convert4FreeWindow extends JFrame {
     private final JButton convertButton = new JButton("Convert");
     private final JButton updateButton = new JButton("Update");
 
-    private ConversionType selectedConversionType = ConversionType.MKV_TO_MP4;
+    private ConversionType selectedConversionType = ConversionType.MKV_TO_MP4_EDIT;
     private File selectedInputFile;
 
     public static void open() {
@@ -166,6 +171,10 @@ public class Convert4FreeWindow extends JFrame {
         body.add(Box.createVerticalStrut(10));
         body.add(createModePanel());
         body.add(Box.createVerticalStrut(14));
+        body.add(sectionTitle("3. Settings"));
+        body.add(Box.createVerticalStrut(10));
+        body.add(createSettingsPanel());
+        body.add(Box.createVerticalStrut(14));
         body.add(overwriteBox);
         body.add(Box.createVerticalStrut(14));
 
@@ -179,6 +188,34 @@ public class Convert4FreeWindow extends JFrame {
 
         panel.add(body, BorderLayout.NORTH);
         return panel;
+    }
+
+    private JPanel createSettingsPanel() {
+        JPanel panel = new JPanel();
+        panel.setOpaque(false);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+
+        JLabel qualityLabel = new JLabel("Quality");
+        qualityLabel.setForeground(MUTED);
+        qualityBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+
+        configureCheckBox(fastStartBox);
+        configureCheckBox(stereoAudioBox);
+        configureCheckBox(copyVideoBox);
+
+        panel.add(qualityLabel);
+        panel.add(Box.createVerticalStrut(5));
+        panel.add(qualityBox);
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(fastStartBox);
+        panel.add(stereoAudioBox);
+        panel.add(copyVideoBox);
+        return panel;
+    }
+
+    private void configureCheckBox(JCheckBox checkBox) {
+        checkBox.setOpaque(false);
+        checkBox.setForeground(TEXT);
     }
 
     private JPanel createModePanel() {
@@ -339,7 +376,7 @@ public class Convert4FreeWindow extends JFrame {
 
     private void setAvailableModes(ConversionType[] types) {
         boolean hasModes = types.length > 0;
-        selectedConversionType = hasModes ? types[0] : ConversionType.MKV_TO_MP4;
+        selectedConversionType = hasModes ? types[0] : ConversionType.MKV_TO_MP4_EDIT;
 
         for (Map.Entry<ConversionType, JToggleButton> entry : modeButtons.entrySet()) {
             boolean available = false;
@@ -359,7 +396,7 @@ public class Convert4FreeWindow extends JFrame {
             modeDescriptionLabel.setText("Choose a supported input file first.");
             outputButton.setEnabled(false);
             convertButton.setEnabled(false);
-            setFriendlyStatus("Choose a file to begin", "Supported inputs: MKV and MP4.");
+            setFriendlyStatus("Choose a file to begin", "Supported inputs: " + ConversionType.supportedInputExtensions());
             setStatus("Waiting");
         }
     }
@@ -373,7 +410,7 @@ public class Convert4FreeWindow extends JFrame {
         if (dialog.getFile() != null) {
             File inputFile = new File(dialog.getDirectory(), dialog.getFile());
             if (!ConversionType.isSupportedInput(inputFile.getName())) {
-                showMessage("Unsupported file", "Choose an MKV or MP4 file.");
+                showMessage("Unsupported file", "Choose one of these inputs: " + ConversionType.supportedInputExtensions());
                 return;
             }
 
@@ -457,6 +494,7 @@ public class Convert4FreeWindow extends JFrame {
         String inputPath = inputField.getText().trim();
         String outputPath = outputField.getText().trim();
         boolean overwrite = overwriteBox.isSelected();
+        ConversionSettings settings = currentSettings();
 
         try {
             FileValidator.validateInputFile(inputPath, conversionType);
@@ -475,7 +513,7 @@ public class Convert4FreeWindow extends JFrame {
             @Override
             protected Void doInBackground() {
                 VideoConverter converter = new VideoConverter();
-                converter.convert(Path.of(inputPath), Path.of(outputPath), conversionType, overwrite, this::publish);
+                converter.convert(Path.of(inputPath), Path.of(outputPath), conversionType, overwrite, settings, this::publish);
                 return null;
             }
 
@@ -560,7 +598,19 @@ public class Convert4FreeWindow extends JFrame {
         for (JToggleButton button : modeButtons.values()) {
             button.setEnabled(!busy && hasInput && button.isVisible());
         }
+        qualityBox.setEnabled(!busy);
+        fastStartBox.setEnabled(!busy);
+        stereoAudioBox.setEnabled(!busy);
+        copyVideoBox.setEnabled(!busy);
         setStatus(status);
+    }
+
+    private ConversionSettings currentSettings() {
+        return new ConversionSettings(
+                (String) qualityBox.getSelectedItem(),
+                fastStartBox.isSelected(),
+                stereoAudioBox.isSelected(),
+                copyVideoBox.isSelected());
     }
 
     private void setStatus(String status) {
@@ -647,15 +697,12 @@ public class Convert4FreeWindow extends JFrame {
         return """
                 Convert4Free Help
 
-                1. Choose a conversion mode.
-                2. Pick an input file.
-                3. Confirm the output file.
+                1. Choose an input file.
+                2. Pick one of the possible output formats.
+                3. Adjust settings if needed.
                 4. Click Convert.
 
-                Supported conversions:
-                  MKV to MP4 for After Effects
-                  MP4 to MOV
-                  MP4 to MP3
+                Convert4Free now includes more than 50 converter presets.
 
                 Command line:
                   java -jar Convert4Free.jar input.mkv output.mp4
@@ -681,6 +728,12 @@ public class Convert4FreeWindow extends JFrame {
     private String changelogText() {
         return """
                 Convert4Free Changelog
+
+                Version 0.5.0
+                - Added 50+ converter presets
+                - Added quality and audio/video settings
+                - Improved the file-first conversion flow
+                - Simplified README and help text
 
                 Version 0.4.0
                 - Fully rebuilt the desktop UI
@@ -718,6 +771,14 @@ public class Convert4FreeWindow extends JFrame {
                 <body>
                   <h1>Update Log</h1>
                   <div class="sub">Convert4Free <span class="badge">v%s</span></div>
+                  <div class="version">
+                    <h2>0.5.0</h2>
+                    <ul>
+                      <li>Added more than 50 converter presets.</li>
+                      <li>Added quality, audio, and playback settings.</li>
+                      <li>Made the file-first workflow clearer.</li>
+                    </ul>
+                  </div>
                   <div class="version">
                     <h2>0.4.1</h2>
                     <ul>
