@@ -8,16 +8,12 @@ import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Insets;
 import java.io.File;
 import java.nio.file.Path;
-import java.util.EnumMap;
-import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -29,7 +25,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
@@ -47,7 +42,7 @@ public class Convert4FreeWindow extends JFrame {
     private static final Color ACCENT_DARK = new Color(20, 91, 75);
     private static final Color ACCENT_SOFT = new Color(226, 245, 240);
 
-    private final Map<ConversionType, JToggleButton> modeButtons = new EnumMap<>(ConversionType.class);
+    private final JComboBox<ConversionType> outputFormatBox = new JComboBox<>();
     private final JTextField inputField = new JTextField();
     private final JTextField outputField = new JTextField();
     private final JTextArea logArea = new JTextArea();
@@ -219,38 +214,26 @@ public class Convert4FreeWindow extends JFrame {
     }
 
     private JPanel createModePanel() {
-        JPanel panel = new JPanel(new GridLayout(0, 1, 0, 8));
-        panel.setOpaque(false);
+        JPanel wrapper = new JPanel();
+        wrapper.setOpaque(false);
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
 
-        ButtonGroup group = new ButtonGroup();
-        for (ConversionType type : ConversionType.values()) {
-            JToggleButton button = modeButton(type);
-            modeButtons.put(type, button);
-            group.add(button);
-            panel.add(button);
-        }
+        outputFormatBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        outputFormatBox.setEnabled(false);
+        outputFormatBox.addActionListener(event -> {
+            ConversionType selected = (ConversionType) outputFormatBox.getSelectedItem();
+            if (selected != null) {
+                selectMode(selected);
+            }
+        });
 
         modeDescriptionLabel.setForeground(MUTED);
         modeDescriptionLabel.setFont(modeDescriptionLabel.getFont().deriveFont(12f));
 
-        JPanel wrapper = new JPanel();
-        wrapper.setOpaque(false);
-        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
-        wrapper.add(panel);
+        wrapper.add(outputFormatBox);
         wrapper.add(Box.createVerticalStrut(8));
         wrapper.add(modeDescriptionLabel);
         return wrapper;
-    }
-
-    private JToggleButton modeButton(ConversionType type) {
-        JToggleButton button = new JToggleButton(type.toString());
-        button.setFocusPainted(false);
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        button.setHorizontalAlignment(JToggleButton.LEFT);
-        button.setFont(button.getFont().deriveFont(Font.BOLD, 14f));
-        button.setBorder(new CompoundBorder(new LineBorder(BORDER, 1, true), new EmptyBorder(12, 14, 12, 14)));
-        button.addActionListener(event -> selectMode(type));
-        return button;
     }
 
     private JPanel createFilePanel() {
@@ -356,17 +339,6 @@ public class Convert4FreeWindow extends JFrame {
 
     private void selectMode(ConversionType type) {
         selectedConversionType = type;
-        for (Map.Entry<ConversionType, JToggleButton> entry : modeButtons.entrySet()) {
-            boolean selected = entry.getKey() == type;
-            JToggleButton button = entry.getValue();
-            button.setSelected(selected);
-            button.setBackground(selected ? ACCENT_SOFT : SURFACE);
-            button.setForeground(selected ? ACCENT_DARK : TEXT);
-            button.setBorder(new CompoundBorder(
-                    new LineBorder(selected ? ACCENT : BORDER, selected ? 2 : 1, true),
-                    new EmptyBorder(selected ? 11 : 12, selected ? 13 : 14, selected ? 11 : 12, selected ? 13 : 14)));
-        }
-
         modeDescriptionLabel.setText(type.description());
         updateOutputSuggestion();
         outputButton.setEnabled(selectedInputFile != null);
@@ -378,19 +350,14 @@ public class Convert4FreeWindow extends JFrame {
         boolean hasModes = types.length > 0;
         selectedConversionType = hasModes ? types[0] : ConversionType.MKV_TO_MP4_EDIT;
 
-        for (Map.Entry<ConversionType, JToggleButton> entry : modeButtons.entrySet()) {
-            boolean available = false;
-            for (ConversionType type : types) {
-                if (entry.getKey() == type) {
-                    available = true;
-                    break;
-                }
-            }
-            entry.getValue().setVisible(available);
-            entry.getValue().setEnabled(available);
+        outputFormatBox.removeAllItems();
+        for (ConversionType type : types) {
+            outputFormatBox.addItem(type);
         }
+        outputFormatBox.setEnabled(hasModes);
 
         if (hasModes) {
+            outputFormatBox.setSelectedItem(types[0]);
             selectMode(types[0]);
         } else {
             modeDescriptionLabel.setText("Choose a supported input file first.");
@@ -601,9 +568,7 @@ public class Convert4FreeWindow extends JFrame {
         updateButton.setEnabled(!busy);
         inputButton.setEnabled(!busy);
         outputButton.setEnabled(!busy && hasInput);
-        for (JToggleButton button : modeButtons.values()) {
-            button.setEnabled(!busy && hasInput && button.isVisible());
-        }
+        outputFormatBox.setEnabled(!busy && hasInput);
         qualityBox.setEnabled(!busy);
         fastStartBox.setEnabled(!busy);
         stereoAudioBox.setEnabled(!busy);
@@ -735,8 +700,12 @@ public class Convert4FreeWindow extends JFrame {
         return """
                 Convert4Free Changelog
 
-                Version 0.5.1
+                Version 0.5.2
                 - Fixed output file selection
+                - Replaced hidden output buttons with a stable output format dropdown
+                - Output format choices are now visible after selecting an input file
+
+                Version 0.5.1
                 - Rebuilt the installer so it installs only Convert4Free.jar
                 - Installer now asks where the final jar should be placed
 
@@ -783,9 +752,15 @@ public class Convert4FreeWindow extends JFrame {
                   <h1>Update Log</h1>
                   <div class="sub">Convert4Free <span class="badge">v%s</span></div>
                   <div class="version">
+                    <h2>0.5.2</h2>
+                    <ul>
+                      <li>Fixed the missing output format selection.</li>
+                      <li>Replaced the hidden format buttons with a reliable dropdown.</li>
+                    </ul>
+                  </div>
+                  <div class="version">
                     <h2>0.5.1</h2>
                     <ul>
-                      <li>Fixed output file selection in the desktop UI.</li>
                       <li>Installer now asks where Convert4Free.jar should be created.</li>
                       <li>The installer leaves only the final jar in the chosen folder.</li>
                     </ul>

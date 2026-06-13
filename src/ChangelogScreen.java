@@ -2,8 +2,12 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
-        System.out.println("Version 0.5.1");
+        System.out.println("Version 0.5.2");
         System.out.println("- Fixed output file selection in the desktop UI");
+        System.out.println("- Replaced hidden output buttons with a stable output format dropdown");
+        System.out.println("- Output format choices are now visible after selecting an input file");
+        System.out.println();
+        System.out.println("Version 0.5.1");
         System.out.println("- Rebuilt the installer as a real jar-only installer");
         System.out.println("- Installer now lets you choose where Convert4Free.jar is created");
         System.out.println("- Installer no longer leaves GitHub source code behind");
