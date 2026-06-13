@@ -13,6 +13,14 @@ AI worked on this project.
 java -jar Convert4Free.jar
 ```
 
+## Install
+
+```powershell
+java -jar installer.jar
+```
+
+The installer asks for a target folder and leaves only `Convert4Free.jar` there.
+
 ## Build
 
 ```powershell

@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
@@ -28,15 +29,14 @@ public class GitHubUpdater {
             log(logger, "Git repository found. Updating with git pull...");
             runCommand(List.of("git", "fetch", "origin"), logger);
             runCommand(List.of("git", "pull", "--ff-only", "origin", "main"), logger);
+            log(logger, "");
+            log(logger, "Recompiling Convert4Free...");
+            compileProject(projectFolder, projectFolder.resolve("out"), logger);
+            buildProgramJar(projectFolder.resolve("out"), projectFolder.resolve(UPDATE_JAR), logger);
         } else {
-            log(logger, "No .git folder found. Updating from GitHub ZIP...");
-            updateFromZip(projectFolder, logger);
+            log(logger, "No .git folder found. Building update in temporary folder...");
+            buildUpdateFromZip(projectFolder, logger);
         }
-
-        log(logger, "");
-        log(logger, "Recompiling Convert4Free...");
-        compileProject(projectFolder, logger);
-        buildProgramJar(projectFolder, logger);
         scheduleJarReplacement(projectFolder, logger);
 
         log(logger, "");
@@ -45,22 +45,36 @@ public class GitHubUpdater {
         log(logger, "Then start Convert4Free again to use the newest version.");
     }
 
-    private void updateFromZip(Path projectFolder, Consumer<String> logger) {
+    private void buildUpdateFromZip(Path projectFolder, Consumer<String> logger) {
+        Path workFolder = null;
         try {
-            Path zipFile = downloadZip(logger);
-            extractZipOverProject(zipFile, projectFolder);
-            Files.deleteIfExists(zipFile);
+            workFolder = Files.createTempDirectory("convert4free-update-");
+            Path zipFile = downloadZip(workFolder, logger);
+            Path sourceFolder = workFolder.resolve("source");
+            Path buildFolder = workFolder.resolve("out");
+            extractZip(zipFile, sourceFolder);
+            log(logger, "Recompiling Convert4Free...");
+            compileProject(sourceFolder, buildFolder, logger);
+            buildProgramJar(buildFolder, projectFolder.resolve(UPDATE_JAR), logger);
         } catch (IOException | InterruptedException exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
             throw new ConversionException("Could not update from GitHub ZIP: " + exception.getMessage());
+        } finally {
+            if (workFolder != null) {
+                try {
+                    deleteFolder(workFolder);
+                } catch (IOException exception) {
+                    log(logger, "Could not remove temporary update folder: " + exception.getMessage());
+                }
+            }
         }
     }
 
-    private Path downloadZip(Consumer<String> logger) throws IOException, InterruptedException {
+    private Path downloadZip(Path workFolder, Consumer<String> logger) throws IOException, InterruptedException {
         log(logger, "Downloading: " + REPOSITORY_ZIP_URL);
-        Path zipFile = Files.createTempFile("convert4free-update", ".zip");
+        Path zipFile = workFolder.resolve("source.zip");
 
         HttpClient client = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -75,7 +89,8 @@ public class GitHubUpdater {
         return zipFile;
     }
 
-    private void extractZipOverProject(Path zipFile, Path projectFolder) throws IOException {
+    private void extractZip(Path zipFile, Path targetFolder) throws IOException {
+        Files.createDirectories(targetFolder);
         try (InputStream inputStream = Files.newInputStream(zipFile);
                 ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
             ZipEntry entry;
@@ -85,8 +100,8 @@ public class GitHubUpdater {
                     continue;
                 }
 
-                Path target = projectFolder.resolve(name).normalize();
-                if (!target.startsWith(projectFolder)) {
+                Path target = targetFolder.resolve(name).normalize();
+                if (!target.startsWith(targetFolder)) {
                     throw new IOException("Blocked unsafe zip entry: " + entry.getName());
                 }
 
@@ -117,13 +132,13 @@ public class GitHubUpdater {
                 || normalizedName.startsWith("out/");
     }
 
-    private void compileProject(Path projectFolder, Consumer<String> logger) {
+    private void compileProject(Path sourceFolder, Path buildFolder, Consumer<String> logger) {
         List<String> command = new ArrayList<>();
         command.add("javac");
         command.add("-d");
-        command.add("out");
+        command.add(buildFolder.toString());
 
-        try (var stream = Files.list(projectFolder.resolve("src"))) {
+        try (var stream = Files.list(sourceFolder.resolve("src"))) {
             stream.filter(path -> path.toString().endsWith(".java"))
                     .map(Path::toString)
                     .forEach(command::add);
@@ -131,24 +146,24 @@ public class GitHubUpdater {
             throw new ConversionException("Could not list Java source files: " + exception.getMessage());
         }
 
-        runCommand(command, logger);
+        runCommand(command, logger, sourceFolder);
     }
 
-    private void buildProgramJar(Path projectFolder, Consumer<String> logger) {
+    private void buildProgramJar(Path buildFolder, Path updateJar, Consumer<String> logger) {
         log(logger, "Building updated app jar...");
         runCommand(
                 List.of(
                         "jar",
                         "--create",
                         "--file",
-                        UPDATE_JAR,
+                        updateJar.toString(),
                         "--main-class",
                         "Convert4Free",
                         "-C",
-                        "out",
+                        buildFolder.toString(),
                         "."),
                 logger,
-                projectFolder);
+                buildFolder);
     }
 
     private void scheduleJarReplacement(Path projectFolder, Consumer<String> logger) {
@@ -222,6 +237,27 @@ public class GitHubUpdater {
     private void log(Consumer<String> logger, String message) {
         if (logger != null) {
             logger.accept(message);
+        }
+    }
+
+    private void deleteFolder(Path folder) throws IOException {
+        if (!Files.exists(folder)) {
+            return;
+        }
+        try (var stream = Files.walk(folder)) {
+            stream.sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException exception) {
+                            throw new RuntimeException(exception);
+                        }
+                    });
+        } catch (RuntimeException exception) {
+            if (exception.getCause() instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw exception;
         }
     }
 }

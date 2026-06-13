@@ -2,6 +2,12 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.5.1");
+        System.out.println("- Fixed output file selection in the desktop UI");
+        System.out.println("- Rebuilt the installer as a real jar-only installer");
+        System.out.println("- Installer now lets you choose where Convert4Free.jar is created");
+        System.out.println("- Installer no longer leaves GitHub source code behind");
+        System.out.println();
         System.out.println("Version 0.5.0");
         System.out.println("- Added more than 50 converter presets");
         System.out.println("- Added video, audio, web, legacy, animation, and editing outputs");

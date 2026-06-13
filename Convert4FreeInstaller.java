@@ -1,4 +1,5 @@
-import java.io.BufferedWriter;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -13,42 +14,159 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
+import javax.swing.UIManager;
 
-public class Convert4FreeInstaller {
+public class Convert4FreeInstaller extends JFrame {
     private static final String REPOSITORY_ZIP_URL =
             "https://github.com/juzzreal/Convert4Free/archive/refs/heads/main.zip";
-    private static final Path INSTALL_FOLDER = Path.of(System.getProperty("user.home"), "Convert4Free");
+
+    private final JTextField targetFolderField = new JTextField(
+            Path.of(System.getProperty("user.home"), "Desktop").toString());
+    private final JTextArea logArea = new JTextArea();
+    private final JButton installButton = new JButton("Install Convert4Free.jar");
 
     public static void main(String[] args) {
-        try {
-            System.out.println("Convert4Free Installer");
-            System.out.println("Source: " + REPOSITORY_ZIP_URL);
-            System.out.println("Install folder: " + INSTALL_FOLDER);
-            System.out.println();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception ignored) {
+                // The installer still works with Java's fallback look and feel.
+            }
 
-            Path zipFile = downloadRepository();
-            replaceInstallFolder(zipFile);
-            compileProject();
-            buildProgramJar();
-            createDesktopLauncher();
+            Convert4FreeInstaller installer = new Convert4FreeInstaller();
+            installer.setVisible(true);
+        });
+    }
 
-            Files.deleteIfExists(zipFile);
+    private Convert4FreeInstaller() {
+        super("Convert4Free Installer");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setMinimumSize(new Dimension(640, 420));
+        setLocationRelativeTo(null);
 
-            System.out.println();
-            System.out.println("Installation complete.");
-            System.out.println("Program jar: " + INSTALL_FOLDER.resolve("Convert4Free.jar"));
-            System.out.println("Use the desktop launcher: Convert4Free starten.bat");
-        } catch (Exception exception) {
-            System.out.println();
-            System.out.println("Installation failed.");
-            System.out.println(exception.getMessage());
-            System.exit(1);
+        JPanel root = new JPanel(new BorderLayout(12, 12));
+        root.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+
+        JLabel intro = new JLabel("Choose where Convert4Free.jar should be created.");
+        root.add(intro, BorderLayout.NORTH);
+        root.add(createTargetPanel(), BorderLayout.CENTER);
+        root.add(createBottomPanel(), BorderLayout.SOUTH);
+        setContentPane(root);
+    }
+
+    private JPanel createTargetPanel() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        JButton chooseButton = new JButton("Choose folder");
+        chooseButton.addActionListener(event -> chooseTargetFolder());
+
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.add(targetFolderField, BorderLayout.CENTER);
+        row.add(chooseButton, BorderLayout.EAST);
+
+        logArea.setEditable(false);
+        logArea.setText("Ready.\nThe installer downloads GitHub source into a temporary folder, builds the app, then keeps only Convert4Free.jar in your chosen folder.\n");
+
+        panel.add(row, BorderLayout.NORTH);
+        panel.add(new JScrollPane(logArea), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createBottomPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        installButton.addActionListener(event -> startInstall());
+        panel.add(installButton, BorderLayout.EAST);
+        return panel;
+    }
+
+    private void chooseTargetFolder() {
+        JFileChooser chooser = new JFileChooser(targetFolderField.getText());
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle("Choose install folder");
+
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            targetFolderField.setText(chooser.getSelectedFile().getAbsolutePath());
         }
     }
 
-    private static Path downloadRepository() throws IOException, InterruptedException {
-        System.out.println("Downloading Convert4Free from GitHub...");
-        Path zipFile = Files.createTempFile("convert4free-main", ".zip");
+    private void startInstall() {
+        Path targetFolder = Path.of(targetFolderField.getText()).toAbsolutePath();
+        installButton.setEnabled(false);
+        logArea.setText("");
+
+        SwingWorker<Path, String> worker = new SwingWorker<>() {
+            @Override
+            protected Path doInBackground() throws Exception {
+                return install(targetFolder, this::publish);
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                for (String chunk : chunks) {
+                    appendLog(chunk);
+                }
+            }
+
+            @Override
+            protected void done() {
+                installButton.setEnabled(true);
+                try {
+                    Path jarPath = get();
+                    appendLog("Done: " + jarPath);
+                    JOptionPane.showMessageDialog(
+                            Convert4FreeInstaller.this,
+                            "Installed:\n" + jarPath,
+                            "Installation complete",
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception exception) {
+                    Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+                    appendLog("Installation failed: " + cause.getMessage());
+                    JOptionPane.showMessageDialog(
+                            Convert4FreeInstaller.this,
+                            cause.getMessage(),
+                            "Installation failed",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+
+        worker.execute();
+    }
+
+    private static Path install(Path targetFolder, java.util.function.Consumer<String> logger)
+            throws IOException, InterruptedException {
+        Files.createDirectories(targetFolder);
+
+        Path workFolder = Files.createTempDirectory("convert4free-install-");
+        try {
+            Path zipFile = downloadRepository(workFolder, logger);
+            Path sourceFolder = workFolder.resolve("source");
+            Path buildFolder = workFolder.resolve("out");
+            extractRepository(zipFile, sourceFolder, logger);
+            compileProject(sourceFolder, buildFolder, logger);
+            Path jarPath = targetFolder.resolve("Convert4Free.jar");
+            buildProgramJar(buildFolder, jarPath, logger);
+            return jarPath;
+        } finally {
+            deleteFolder(workFolder);
+        }
+    }
+
+    private static Path downloadRepository(Path workFolder, java.util.function.Consumer<String> logger)
+            throws IOException, InterruptedException {
+        logger.accept("Downloading Convert4Free from GitHub...");
+        Path zipFile = workFolder.resolve("source.zip");
 
         HttpClient client = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -63,13 +181,10 @@ public class Convert4FreeInstaller {
         return zipFile;
     }
 
-    private static void replaceInstallFolder(Path zipFile) throws IOException {
-        System.out.println("Extracting project...");
-
-        if (Files.exists(INSTALL_FOLDER)) {
-            deleteFolder(INSTALL_FOLDER);
-        }
-        Files.createDirectories(INSTALL_FOLDER);
+    private static void extractRepository(Path zipFile, Path targetFolder, java.util.function.Consumer<String> logger)
+            throws IOException {
+        logger.accept("Extracting into temporary build folder...");
+        Files.createDirectories(targetFolder);
 
         try (InputStream inputStream = Files.newInputStream(zipFile);
                 ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
@@ -80,8 +195,8 @@ public class Convert4FreeInstaller {
                     continue;
                 }
 
-                Path target = INSTALL_FOLDER.resolve(name).normalize();
-                if (!target.startsWith(INSTALL_FOLDER)) {
+                Path target = targetFolder.resolve(name).normalize();
+                if (!target.startsWith(targetFolder)) {
                     throw new IOException("Blocked unsafe zip entry: " + entry.getName());
                 }
 
@@ -103,77 +218,71 @@ public class Convert4FreeInstaller {
         return zipEntryName.substring(slashIndex + 1);
     }
 
-    private static void compileProject() throws IOException, InterruptedException {
-        System.out.println("Compiling Java files...");
+    private static void compileProject(Path sourceFolder, Path buildFolder, java.util.function.Consumer<String> logger)
+            throws IOException, InterruptedException {
+        logger.accept("Compiling Java files...");
 
         List<String> command = new ArrayList<>();
         command.add("javac");
         command.add("-d");
-        command.add("out");
+        command.add(buildFolder.toString());
 
-        try (var stream = Files.list(INSTALL_FOLDER.resolve("src"))) {
+        try (var stream = Files.list(sourceFolder.resolve("src"))) {
             stream.filter(path -> path.toString().endsWith(".java"))
                     .map(Path::toString)
                     .forEach(command::add);
         }
 
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.directory(INSTALL_FOLDER.toFile());
-        processBuilder.inheritIO();
-
-        Process process = processBuilder.start();
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new IOException("Compilation failed. Make sure the Java JDK is installed.");
-        }
+        runCommand(command, sourceFolder, logger);
     }
 
-    private static void createDesktopLauncher() throws IOException {
-        System.out.println("Creating desktop launcher...");
-
-        Path desktop = Path.of(System.getProperty("user.home"), "Desktop");
-        if (!Files.exists(desktop)) {
-            desktop = Path.of(System.getProperty("user.home"), "OneDrive", "Desktop");
-        }
-        Files.createDirectories(desktop);
-
-        Path launcher = desktop.resolve("Convert4Free starten.bat");
-        try (BufferedWriter writer = Files.newBufferedWriter(launcher)) {
-            writer.write("@echo off");
-            writer.newLine();
-            writer.write("cd /d \"" + INSTALL_FOLDER + "\"");
-            writer.newLine();
-            writer.write("java -jar Convert4Free.jar");
-            writer.newLine();
-            writer.write("pause");
-            writer.newLine();
-        }
-    }
-
-    private static void buildProgramJar() throws IOException, InterruptedException {
-        System.out.println("Building Convert4Free.jar...");
-
-        ProcessBuilder processBuilder = new ProcessBuilder(
+    private static void buildProgramJar(Path buildFolder, Path jarPath, java.util.function.Consumer<String> logger)
+            throws IOException, InterruptedException {
+        logger.accept("Building final jar...");
+        List<String> command = List.of(
                 "jar",
                 "--create",
                 "--file",
-                "Convert4Free.jar",
+                jarPath.toString(),
                 "--main-class",
                 "Convert4Free",
                 "-C",
-                "out",
+                buildFolder.toString(),
                 ".");
-        processBuilder.directory(INSTALL_FOLDER.toFile());
-        processBuilder.inheritIO();
+        runCommand(command, buildFolder, logger);
+        logger.accept("Only the final jar was installed. Temporary source files were removed.");
+    }
+
+    private static void runCommand(List<String> command, Path workingFolder, java.util.function.Consumer<String> logger)
+            throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.directory(workingFolder.toFile());
+        processBuilder.redirectErrorStream(true);
 
         Process process = processBuilder.start();
+        try (var reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                logger.accept(line);
+            }
+        }
+
         int exitCode = process.waitFor();
         if (exitCode != 0) {
-            throw new IOException("Could not build Convert4Free.jar. Make sure the JDK 'jar' tool is installed.");
+            throw new IOException("Command failed with exit code " + exitCode + ": " + String.join(" ", command));
         }
     }
 
+    private void appendLog(String line) {
+        logArea.append(line + System.lineSeparator());
+        logArea.setCaretPosition(logArea.getDocument().getLength());
+    }
+
     private static void deleteFolder(Path folder) throws IOException {
+        if (!Files.exists(folder)) {
+            return;
+        }
         try (var stream = Files.walk(folder)) {
             stream.sorted(Comparator.reverseOrder())
                     .forEach(path -> {

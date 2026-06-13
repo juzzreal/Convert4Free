@@ -61,7 +61,7 @@ public class Convert4FreeWindow extends JFrame {
     private final JLabel statusDetailLabel = new JLabel("Convert4Free will detect the format and show what you can convert it into.");
     private final JLabel modeDescriptionLabel = new JLabel();
     private final JButton inputButton = new JButton("Choose");
-    private final JButton outputButton = new JButton("Choose");
+    private final JButton outputButton = new JButton("Save as");
     private final JButton convertButton = new JButton("Convert");
     private final JButton updateButton = new JButton("Update");
 
@@ -418,6 +418,7 @@ public class Convert4FreeWindow extends JFrame {
             inputField.setText(inputFile.getAbsolutePath());
             setAvailableModes(ConversionType.forInputPath(inputFile.getName()));
             outputField.setText(suggestOutputPath(inputFile, selectedConversionType));
+            outputButton.setEnabled(true);
             convertButton.setEnabled(true);
             setFriendlyStatus("File detected", inputFile.getName() + " can be converted to " + availableTargetsText() + ".");
             appendLog("Selected input: " + inputFile.getAbsolutePath());
@@ -425,6 +426,11 @@ public class Convert4FreeWindow extends JFrame {
     }
 
     private void chooseOutputFile() {
+        if (selectedInputFile == null) {
+            showMessage("Choose input first", "Please choose an input file first. Then Convert4Free can suggest the right output type.");
+            return;
+        }
+
         ConversionType conversionType = selectedConversionType;
         FileDialog dialog = new FileDialog((Frame) this, "Save " + conversionType.outputExtension() + " file", FileDialog.SAVE);
         dialog.setFile(defaultOutputName(conversionType));
@@ -729,6 +735,11 @@ public class Convert4FreeWindow extends JFrame {
         return """
                 Convert4Free Changelog
 
+                Version 0.5.1
+                - Fixed output file selection
+                - Rebuilt the installer so it installs only Convert4Free.jar
+                - Installer now asks where the final jar should be placed
+
                 Version 0.5.0
                 - Added 50+ converter presets
                 - Added quality and audio/video settings
@@ -771,6 +782,14 @@ public class Convert4FreeWindow extends JFrame {
                 <body>
                   <h1>Update Log</h1>
                   <div class="sub">Convert4Free <span class="badge">v%s</span></div>
+                  <div class="version">
+                    <h2>0.5.1</h2>
+                    <ul>
+                      <li>Fixed output file selection in the desktop UI.</li>
+                      <li>Installer now asks where Convert4Free.jar should be created.</li>
+                      <li>The installer leaves only the final jar in the chosen folder.</li>
+                    </ul>
+                  </div>
                   <div class="version">
                     <h2>0.5.0</h2>
                     <ul>
