@@ -2,6 +2,11 @@ public class ChangelogScreen {
     public static void print() {
         System.out.println("Convert4Free Changelog");
         System.out.println();
+        System.out.println("Version 0.5.3");
+        System.out.println("- Rebuilt the status area");
+        System.out.println("- Added clear step-by-step progress text");
+        System.out.println("- Moved technical FFmpeg output into a secondary details area");
+        System.out.println();
         System.out.println("Version 0.5.2");
         System.out.println("- Fixed output file selection in the desktop UI");
         System.out.println("- Replaced hidden output buttons with a stable output format dropdown");

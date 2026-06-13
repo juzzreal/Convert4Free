@@ -54,6 +54,11 @@ public class Convert4FreeWindow extends JFrame {
     private final JLabel statusLabel = new JLabel("Ready");
     private final JLabel statusTitleLabel = new JLabel("Choose a file to begin");
     private final JLabel statusDetailLabel = new JLabel("Convert4Free will detect the format and show what you can convert it into.");
+    private final JLabel inputStepLabel = new JLabel();
+    private final JLabel outputStepLabel = new JLabel();
+    private final JLabel convertStepLabel = new JLabel();
+    private final JLabel doneStepLabel = new JLabel();
+    private final JLabel detailsLabel = new JLabel("Technical details");
     private final JLabel modeDescriptionLabel = new JLabel();
     private final JButton inputButton = new JButton("Choose");
     private final JButton outputButton = new JButton("Save as");
@@ -89,6 +94,7 @@ public class Convert4FreeWindow extends JFrame {
         setContentPane(root);
 
         setAvailableModes(new ConversionType[0]);
+        updateStepLabels("active", "waiting", "waiting", "waiting");
         pack();
     }
 
@@ -292,7 +298,7 @@ public class Convert4FreeWindow extends JFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
 
-        JLabel title = new JLabel("Status");
+        JLabel title = new JLabel("What is happening?");
         title.setForeground(TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
 
@@ -322,7 +328,21 @@ public class Convert4FreeWindow extends JFrame {
         friendlyStatus.add(Box.createVerticalStrut(4));
         friendlyStatus.add(statusDetailLabel);
 
-        logArea.setText("Waiting for a file.\n");
+        JPanel stepsPanel = new JPanel();
+        stepsPanel.setOpaque(false);
+        stepsPanel.setLayout(new BoxLayout(stepsPanel, BoxLayout.Y_AXIS));
+        stepsPanel.add(inputStepLabel);
+        stepsPanel.add(Box.createVerticalStrut(6));
+        stepsPanel.add(outputStepLabel);
+        stepsPanel.add(Box.createVerticalStrut(6));
+        stepsPanel.add(convertStepLabel);
+        stepsPanel.add(Box.createVerticalStrut(6));
+        stepsPanel.add(doneStepLabel);
+
+        detailsLabel.setForeground(MUTED);
+        detailsLabel.setFont(detailsLabel.getFont().deriveFont(Font.BOLD, 12f));
+
+        logArea.setText("No technical messages yet.\n");
 
         JScrollPane scrollPane = new JScrollPane(logArea);
         scrollPane.setBorder(new LineBorder(BORDER, 1, true));
@@ -331,8 +351,10 @@ public class Convert4FreeWindow extends JFrame {
         top.setOpaque(false);
         top.add(header, BorderLayout.NORTH);
         top.add(friendlyStatus, BorderLayout.CENTER);
+        top.add(stepsPanel, BorderLayout.SOUTH);
 
         panel.add(top, BorderLayout.NORTH);
+        panel.add(detailsLabel, BorderLayout.SOUTH);
         panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
     }
@@ -344,6 +366,7 @@ public class Convert4FreeWindow extends JFrame {
         outputButton.setEnabled(selectedInputFile != null);
         setFriendlyStatus("Ready to convert", "Output will be created as " + type.targetLabel() + ".");
         setStatus(type.targetLabel());
+        updateStepLabels("done", "active", "waiting", "waiting");
     }
 
     private void setAvailableModes(ConversionType[] types) {
@@ -365,6 +388,7 @@ public class Convert4FreeWindow extends JFrame {
             convertButton.setEnabled(false);
             setFriendlyStatus("Choose a file to begin", "Supported inputs: " + ConversionType.supportedInputExtensions());
             setStatus("Waiting");
+            updateStepLabels("active", "waiting", "waiting", "waiting");
         }
     }
 
@@ -388,6 +412,7 @@ public class Convert4FreeWindow extends JFrame {
             outputButton.setEnabled(true);
             convertButton.setEnabled(true);
             setFriendlyStatus("File detected", inputFile.getName() + " can be converted to " + availableTargetsText() + ".");
+            updateStepLabels("done", "active", "waiting", "waiting");
             appendLog("Selected input: " + inputFile.getAbsolutePath());
         }
     }
@@ -480,6 +505,7 @@ public class Convert4FreeWindow extends JFrame {
         setBusy(true, "Converting");
         logArea.setText("");
         setFriendlyStatus("Conversion running", "FFmpeg is processing your file. You can follow details below.");
+        updateStepLabels("done", "done", "active", "waiting");
         appendLog("Starting " + conversionType + "...");
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -504,11 +530,13 @@ public class Convert4FreeWindow extends JFrame {
                     get();
                     setStatus("Complete");
                     setFriendlyStatus("Conversion complete", "Your new file is ready.");
+                    updateStepLabels("done", "done", "done", "done");
                     showMessage("Done", "Conversion completed successfully.");
                 } catch (Exception exception) {
                     Throwable cause = exception.getCause() == null ? exception : exception.getCause();
                     setStatus("Failed");
                     setFriendlyStatus("Conversion failed", "Check the details below for the FFmpeg message.");
+                    updateStepLabels("done", "done", "error", "waiting");
                     appendLog("Conversion failed.");
                     appendLog(cause.getMessage());
                     showMessage("Conversion failed", cause.getMessage());
@@ -523,6 +551,7 @@ public class Convert4FreeWindow extends JFrame {
         setBusy(true, "Updating");
         logArea.setText("");
         setFriendlyStatus("Updating Convert4Free", "Downloading the newest GitHub version and preparing the app jar.");
+        updateStepLabels("done", "done", "active", "waiting");
         appendLog("Starting update...");
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -547,11 +576,13 @@ public class Convert4FreeWindow extends JFrame {
                     get();
                     setStatus("Update ready");
                     setFriendlyStatus("Update prepared", "Close Convert4Free so the replacement can finish.");
+                    updateStepLabels("done", "done", "done", "active");
                     showMessage("Update prepared", "Close Convert4Free. The updater will finish replacing the app jar after exit.");
                 } catch (Exception exception) {
                     Throwable cause = exception.getCause() == null ? exception : exception.getCause();
                     setStatus("Update failed");
                     setFriendlyStatus("Update failed", "The app could not finish the update. Details are below.");
+                    updateStepLabels("done", "done", "error", "waiting");
                     appendLog("Update failed.");
                     appendLog(cause.getMessage());
                     showMessage("Update failed", cause.getMessage());
@@ -596,6 +627,39 @@ public class Convert4FreeWindow extends JFrame {
     private void appendLog(String message) {
         logArea.append(message + System.lineSeparator());
         logArea.setCaretPosition(logArea.getDocument().getLength());
+    }
+
+    private void updateStepLabels(String input, String output, String convert, String done) {
+        setStepLabel(inputStepLabel, input, "1", "Input file", stepText(input, "Choose a file", "File selected", "File problem"));
+        setStepLabel(outputStepLabel, output, "2", "Output", stepText(output, "Pick an output format", "Output is ready", "Output problem"));
+        setStepLabel(convertStepLabel, convert, "3", "Conversion", stepText(convert, "Waiting to convert", "Conversion finished", "Conversion failed"));
+        setStepLabel(doneStepLabel, done, "4", "Finish", stepText(done, "Waiting for result", "Ready to use", "Could not finish"));
+    }
+
+    private String stepText(String state, String waiting, String complete, String failed) {
+        return switch (state) {
+            case "active" -> waiting;
+            case "done" -> complete;
+            case "error" -> failed;
+            default -> waiting;
+        };
+    }
+
+    private void setStepLabel(JLabel label, String state, String number, String title, String text) {
+        String mark = switch (state) {
+            case "done" -> "OK";
+            case "active" -> ">";
+            case "error" -> "!";
+            default -> "-";
+        };
+        label.setText(mark + "  " + number + ". " + title + " - " + text);
+        label.setForeground(switch (state) {
+            case "done" -> ACCENT_DARK;
+            case "active" -> TEXT;
+            case "error" -> new Color(176, 42, 55);
+            default -> MUTED;
+        });
+        label.setFont(label.getFont().deriveFont("active".equals(state) ? Font.BOLD : Font.PLAIN, 13f));
     }
 
     private void showMessage(String title, String message) {
@@ -700,6 +764,11 @@ public class Convert4FreeWindow extends JFrame {
         return """
                 Convert4Free Changelog
 
+                Version 0.5.3
+                - Rebuilt the status area
+                - Added clear step-by-step progress text
+                - Moved technical FFmpeg output into a secondary details area
+
                 Version 0.5.2
                 - Fixed output file selection
                 - Replaced hidden output buttons with a stable output format dropdown
@@ -751,6 +820,14 @@ public class Convert4FreeWindow extends JFrame {
                 <body>
                   <h1>Update Log</h1>
                   <div class="sub">Convert4Free <span class="badge">v%s</span></div>
+                  <div class="version">
+                    <h2>0.5.3</h2>
+                    <ul>
+                      <li>Rebuilt the status area so each step is understandable.</li>
+                      <li>Added simple progress labels for input, output, conversion, and finish.</li>
+                      <li>Technical FFmpeg messages are still available as details.</li>
+                    </ul>
+                  </div>
                   <div class="version">
                     <h2>0.5.2</h2>
                     <ul>
